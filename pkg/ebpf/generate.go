@@ -13,7 +13,8 @@ import (
 
 const defaultIface = "lo"
 
-var nl netlink.Link
+var filter netlink.Filter
+var qdisc netlink.Qdisc
 
 func LoadObjects() error {
 	objs := ebpfObjects{}
@@ -27,7 +28,7 @@ func LoadObjects() error {
 		return err
 	}
 
-	nl, err = netlink.LinkByIndex(iface.Index)
+	nl, err := netlink.LinkByIndex(iface.Index)
 	if err != nil {
 		return err
 	}
@@ -37,13 +38,13 @@ func LoadObjects() error {
 		Handle:    netlink.MakeHandle(0xffff, 0),
 		Parent:    netlink.HANDLE_CLSACT,
 	}
-	qdisc := &netlink.GenericQdisc{
+	qdisc = &netlink.GenericQdisc{
 		QdiscAttrs: attrs,
 		QdiscType:  "clsact",
 	}
 
 	if err := netlink.QdiscAdd(qdisc); err != nil {
-		return fmt.Errorf("QdiscAdd err: ", err.Error())
+		return fmt.Errorf("failed to add qdisc: %v", err.Error())
 	}
 
 	filterattrs := netlink.FilterAttrs{
@@ -54,7 +55,7 @@ func LoadObjects() error {
 		Priority:  1,
 	}
 
-	filter := &netlink.BpfFilter{
+	filter = &netlink.BpfFilter{
 		FilterAttrs:  filterattrs,
 		Fd:           objs.TcEgress.FD(),
 		Name:         "tc_egress",
@@ -63,7 +64,18 @@ func LoadObjects() error {
 
 	err = netlink.FilterAdd(filter)
 	if err != nil {
-		return fmt.Errorf("Filter err: ", err.Error())
+		return fmt.Errorf("failed to add filter err: %v", err.Error())
+	}
+	return nil
+}
+
+func Detach() error {
+	err := netlink.FilterDel(filter)
+	if err != nil {
+		return fmt.Errorf("failed to delete filter %v: ", err)
+	}
+	if err := netlink.QdiscDel(qdisc); err != nil {
+		return fmt.Errorf("failed to delete qdisc: %v", err)
 	}
 	return nil
 }

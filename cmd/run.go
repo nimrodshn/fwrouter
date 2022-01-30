@@ -36,6 +36,7 @@ func runRouter(cmd *cobra.Command, args []string) {
 	if err := ebpf.LoadObjects(); err != nil {
 		log.Fatalf("Failed to load eBPF objects to kernel: %v", err)
 	}
+	defer ebpf.Detach()
 
 	parser := config.NewParser()
 	cfg, err := parser.Parse(configFile)
