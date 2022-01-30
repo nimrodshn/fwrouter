@@ -1,4 +1,5 @@
 #include <linux/bpf.h>
+#include <linux/pkt_cls.h>
 #include "bpf_helpers.h"
 
 #define MAX_NODES 256
@@ -18,10 +19,10 @@ struct bpf_map_def SEC("maps") https_nodes = {
     .max_entries = MAX_NODES,
 };
 
-SEC("xdp")
-int router(struct xdp_md *ctx) {
-    bpf_printk("Got here.\n");
-    return XDP_PASS;
+SEC("tc/egress")
+int tc_egress(struct __sk_buff *skb)
+{
+    return TC_ACT_OK;
 }
 
 char _license[] SEC("license") = "GPL";

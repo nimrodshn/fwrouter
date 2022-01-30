@@ -4,9 +4,11 @@
 package ebpf
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 const defaultIface = "lo"
@@ -30,13 +32,38 @@ func LoadObjects() error {
 		return err
 	}
 
-	err = netlink.LinkSetXdpFd(nl, objs.Router.FD())
+	attrs := netlink.QdiscAttrs{
+		LinkIndex: nl.Attrs().Index,
+		Handle:    netlink.MakeHandle(0xffff, 0),
+		Parent:    netlink.HANDLE_CLSACT,
+	}
+	qdisc := &netlink.GenericQdisc{
+		QdiscAttrs: attrs,
+		QdiscType:  "clsact",
+	}
+
+	if err := netlink.QdiscAdd(qdisc); err != nil {
+		return fmt.Errorf("QdiscAdd err: ", err.Error())
+	}
+
+	filterattrs := netlink.FilterAttrs{
+		LinkIndex: nl.Attrs().Index,
+		Parent:    netlink.HANDLE_MIN_EGRESS,
+		Handle:    netlink.MakeHandle(0, 1),
+		Protocol:  unix.ETH_P_ALL,
+		Priority:  1,
+	}
+
+	filter := &netlink.BpfFilter{
+		FilterAttrs:  filterattrs,
+		Fd:           objs.TcEgress.FD(),
+		Name:         "tc_egress",
+		DirectAction: true,
+	}
+
+	err = netlink.FilterAdd(filter)
 	if err != nil {
-		return err
+		return fmt.Errorf("Filter err: ", err.Error())
 	}
 	return nil
-}
-
-func Detach() error {
-	return netlink.LinkSetXdpFd(nl, -1)
 }

@@ -1,0 +1,11 @@
+---
+routes: 
+ - name: "test"
+   nodes:
+   - name: "some-process"
+     type: "process"
+     iface: "lo"
+     traffic: "http"
+   - name: "some-container"
+     type: "container"
+     traffic: "http"
