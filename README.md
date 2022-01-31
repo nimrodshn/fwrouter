@@ -21,6 +21,8 @@ routes:
      type: "process"
      iface: "lo"
      traffic: "http"
+     destination: "some-container"
+     destination_type: "container"
    - name: "some-container"
      type: "container"
      traffic: "http"

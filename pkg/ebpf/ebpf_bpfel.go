@@ -61,7 +61,8 @@ type ebpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
-	HttpsNodes *ebpf.MapSpec `ebpf:"https_nodes"`
+	RouteMap *ebpf.MapSpec `ebpf:"route_map"`
+	TxPort   *ebpf.MapSpec `ebpf:"tx_port"`
 }
 
 // ebpfObjects contains all objects after they have been loaded into the kernel.
@@ -83,12 +84,14 @@ func (o *ebpfObjects) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
-	HttpsNodes *ebpf.Map `ebpf:"https_nodes"`
+	RouteMap *ebpf.Map `ebpf:"route_map"`
+	TxPort   *ebpf.Map `ebpf:"tx_port"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
-		m.HttpsNodes,
+		m.RouteMap,
+		m.TxPort,
 	)
 }
 

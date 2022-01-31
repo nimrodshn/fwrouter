@@ -24,9 +24,11 @@ var (
 )
 
 type Node struct {
-	Name    string       `yaml:"name"`
-	Type    NodeType     `yaml:"type"`
-	IP      string       `yaml:"ip,omitempty"`
-	Iface   string       `yaml:"iface,omitempty"`
-	Traffic *TrafficType `yaml:"traffic,omitempty"`
+	Name            string       `yaml:"name"`
+	Type            NodeType     `yaml:"type"`
+	IP              string       `yaml:"ip,omitempty"`
+	Iface           string       `yaml:"iface,omitempty"`
+	Traffic         *TrafficType `yaml:"traffic,omitempty"`
+	Destination     string       `yaml:"destination,omitempty"`
+	DestinationType *NodeType    `yanl:"destination_type,omitempty"`
 }

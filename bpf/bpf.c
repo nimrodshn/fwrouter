@@ -25,7 +25,7 @@ struct bpf_map_def SEC("maps") tx_port = {
     .max_entries = MAX_NODES,
 };
 
-SEC("tc/egress")
+SEC("tc")
 int tc_egress(struct __sk_buff *skb)
 {
     void *data_end = (void *)(unsigned long long)skb->data_end;
@@ -39,14 +39,13 @@ int tc_egress(struct __sk_buff *skb)
     if (data + sizeof(struct iphdr) > data_end)
         return TC_ACT_SHOT;
     
-    char key [KEY_SIZE];
-    snprintf(key, KEY_SIZE, "%d%d", ip->saddr, skb->ifindex);
+    // char key [KEY_SIZE];
+    // snprintf(key, KEY_SIZE, "%d%d", ip->saddr, skb->ifindex);
 
-    int *ifidx = bpf_map_lookup_elem(&route_map, &key);
-    if (ifidx) {
-        return bpf_redirect_map(&tx_port, *ifidx, 0);    
-    }
-
+    // int *ifidx = bpf_map_lookup_elem(&route_map, &key);
+    // if (ifidx) {
+    //     return bpf_redirect_map(&tx_port, *ifidx, 0);    
+    // }
     return TC_ACT_OK;
 }
 
