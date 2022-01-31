@@ -28,4 +28,4 @@ routes:
    - name: "sgw"
      type: "process"
      iface: "lo"
-     traffic: "http"
+     traffic: "http" 
