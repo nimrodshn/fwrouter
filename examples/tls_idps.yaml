@@ -18,10 +18,6 @@ routes:
      traffic: "http"
      destination: "sgw"
      destination_type: "process"
-   - name: "sgw"
-     type: "process"
-     iface: "lo"
-     traffic: "http"
  - name: "HTTP path"
    nodes:
    - name: "sgw"
