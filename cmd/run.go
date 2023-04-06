@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"fwrouter/pkg/config"
 	"fwrouter/pkg/ebpf"
-	"fwrouter/pkg/registry"
+	"fwrouter/pkg/mappers"
+	"fwrouter/pkg/yaml"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/spf13/cobra"
@@ -38,20 +38,15 @@ func runRouter(cmd *cobra.Command, args []string) {
 	}
 	defer ebpf.Detach()
 
-	parser := config.NewParser()
-	cfg, err := parser.Parse(configFile)
+	parser := yaml.NewParser()
+	rawConfigFile, err := parser.Parse(configFile)
 	if err != nil {
 		log.Fatalf("Failed to parse config file: '%s': %v", configFile, err)
 	}
 
-	// Attempt to register the routes passed in the config file.
-	// Register will validate that the nodes exist and that the routes
-	// do not collide with one another in a manner which will be interpretable
-	// by the router.
-	reg := registry.NewRouteRegistry()
-	_, err = reg.Register(cfg)
+	_, err = mappers.MapConfig(rawConfigFile)
 	if err != nil {
-		log.Fatalf("Failed to register the recieved routes: %v", err)
+		log.Fatalf("Failed to map config file: '%s': %v", configFile, err)
 	}
 
 	log.Println("Waiting for events..")

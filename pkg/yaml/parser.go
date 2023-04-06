@@ -1,4 +1,4 @@
-package config
+package yaml
 
 import (
 	"fwrouter/pkg/api"

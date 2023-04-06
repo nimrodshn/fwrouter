@@ -1,11 +1,38 @@
 ---
-routes: 
- - name: "test"
-   nodes:
-   - name: "some-process"
-     type: "process"
-     iface: "lo"
-     traffic: "http"
-   - name: "some-container"
-     type: "container"
-     traffic: "http"
+---
+states:
+  - name: "eth0"
+    interface: "eth0"
+    transitions:
+      - name: "https-traffic"
+        condition: "https"
+        next: "haproxy"
+      - name: "default-traffic"
+        next": "envoy"
+        mark: "envoy"
+  - name: "haproxy"
+    interface: "haproxy0"
+    transitions:
+      - name: "default-traffic"
+        next": "idps"
+  - name: "idps"
+    interface: "idps0"
+    transitions:
+      - name: "past-envoy-traffic"
+        condition: "envoy"
+        next: "eth0"
+        queue: "tx"
+      - name: "envoy-bound-traffic"
+        next: "eth0"
+        queue: "rx"
+        mark: "envoy"
+marks:
+  - name: "envoy"
+    value: 100
+conditions:
+  - name: "envoy"
+    type: "mark"
+    value: "envoy"
+  - name: "https"
+    type: "l7-protocol"
+    value: "https"
