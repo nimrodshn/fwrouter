@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const defaultIface = "lo"
+const defaultIface = "eth0"
 
 var filter netlink.Filter
 var qdisc netlink.Qdisc

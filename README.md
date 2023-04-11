@@ -5,12 +5,12 @@ eBPF routing to/from interface devices on a host machine.
 - llvm >= 10
 - clang >= 10
 ---
-1. Retrieve the archive signature for `llvm-10`:
+1. Retrieve the gpg key for `llvm-10`:
 ```
 wget --no-check-certificate -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
 ```
 
-2. Add the PPA where to install from:
+2. Add the appropriate repository:
 ```
 add-apt-repository 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10  main'
 ```
@@ -78,6 +78,10 @@ conditions:
     type: "l7 protocol"
     value: "https"
 ```
+
+The above transition table describes the following diagram: 
+
+![packet-flow](/docs/dpv2doodle.jpg)
 
 The router will do its best effort to find interfaces for services if they are not provided in the config file.
 The router will route traffic according to the order in the routes provided.
