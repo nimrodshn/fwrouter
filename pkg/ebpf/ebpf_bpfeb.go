@@ -54,7 +54,7 @@ type ebpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfProgramSpecs struct {
-	TcEgress *ebpf.ProgramSpec `ebpf:"tc_egress"`
+	TcIngress *ebpf.ProgramSpec `ebpf:"tc_ingress"`
 }
 
 // ebpfMapSpecs contains maps before they are loaded into the kernel.
@@ -62,7 +62,6 @@ type ebpfProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
 	RouteMap *ebpf.MapSpec `ebpf:"route_map"`
-	TxPort   *ebpf.MapSpec `ebpf:"tx_port"`
 }
 
 // ebpfObjects contains all objects after they have been loaded into the kernel.
@@ -85,13 +84,11 @@ func (o *ebpfObjects) Close() error {
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
 	RouteMap *ebpf.Map `ebpf:"route_map"`
-	TxPort   *ebpf.Map `ebpf:"tx_port"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
 		m.RouteMap,
-		m.TxPort,
 	)
 }
 
@@ -99,12 +96,12 @@ func (m *ebpfMaps) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfPrograms struct {
-	TcEgress *ebpf.Program `ebpf:"tc_egress"`
+	TcIngress *ebpf.Program `ebpf:"tc_ingress"`
 }
 
 func (p *ebpfPrograms) Close() error {
 	return _EbpfClose(
-		p.TcEgress,
+		p.TcIngress,
 	)
 }
 

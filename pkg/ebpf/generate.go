@@ -33,6 +33,12 @@ func LoadObjects() error {
 		return err
 	}
 
+	// Create a 'clsact' qdisc and attach it to our
+	// source interface. This qdisc will than be used
+	// to attach our bpf program on its ingress hook.
+	// This qdisc is a dummy providing the necessary ingress/egress
+	// hook points for our bpf program.
+	// For more information please see: https://docs.cilium.io/en/latest/bpf/progtypes/#tc-traffic-control
 	attrs := netlink.QdiscAttrs{
 		LinkIndex: nl.Attrs().Index,
 		Handle:    netlink.MakeHandle(0xffff, 0),
@@ -49,7 +55,7 @@ func LoadObjects() error {
 
 	filterattrs := netlink.FilterAttrs{
 		LinkIndex: nl.Attrs().Index,
-		Parent:    netlink.HANDLE_MIN_EGRESS,
+		Parent:    netlink.HANDLE_MIN_INGRESS,
 		Handle:    netlink.MakeHandle(0, 1),
 		Protocol:  unix.ETH_P_ALL,
 		Priority:  1,
@@ -57,8 +63,8 @@ func LoadObjects() error {
 
 	filter = &netlink.BpfFilter{
 		FilterAttrs:  filterattrs,
-		Fd:           objs.TcEgress.FD(),
-		Name:         "tc_egress",
+		Fd:           objs.TcIngress.FD(),
+		Name:         "tc_ingress",
 		DirectAction: true,
 	}
 

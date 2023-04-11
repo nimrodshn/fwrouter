@@ -33,7 +33,7 @@ sudo ln -s /usr/bin/clang-10 /usr/bin/clang
 ## Where are my 'bpf_printk' logs?
 Run the following command: `sudo cat /sys/kernel/debug/tracing/trace_pipe`
 
-## How to run this router?
+## How to run `fwrouter`?
 Compile the program using `make`, followed by: `sudo ./fwrouter run --config-file=./examples/test.yaml`
 
 ## How to define a state machine for packet flow?
@@ -82,3 +82,7 @@ conditions:
 The router will do its best effort to find interfaces for services if they are not provided in the config file.
 The router will route traffic according to the order in the routes provided.
 For more example config files see `/examples` folder.
+
+## How to verify the program is loaded properly?
+Use the following command: `ip link`, and find the added interfaces listed.
+To see the `bpf` filter added use the following: `sudo tc -s -d filter show dev eth0 ingress`.

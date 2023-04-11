@@ -36,11 +36,12 @@ func MapConfig(config *api.Config) (*models.Config, error) {
 		var stateToAdd models.State
 		stateToAdd.Name = state.Name
 		// Verify the interface representing the state exists.
-		_, err := iface.VerifyExists(state.InterfaceName)
+		iface, err := iface.VerifyExists(state.InterfaceName)
 		if err != nil {
 			return nil, err
 		}
 		stateToAdd.InterfaceName = state.InterfaceName
+		stateToAdd.InterfaceIdx = iface.Attrs().Index
 		stateToAdd.Transitions = make([]models.Transition, len(state.Transitions))
 		statesMap[stateToAdd.Name] = stateToAdd
 	}

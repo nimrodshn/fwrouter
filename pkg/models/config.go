@@ -27,6 +27,7 @@ type Mark struct {
 type State struct {
 	Name          string
 	InterfaceName string
+	InterfaceIdx  int
 	Transitions   []Transition
 }
 

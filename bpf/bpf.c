@@ -10,7 +10,25 @@
 const int IPV4_ALEN = 4;
 const int KEY_SIZE = sizeof(unsigned int) + IPV4_ALEN + 1;
 
-// A maps of interfaces used to route https traffic.
+enum condition_type {
+    L7PROTOCOL,
+    MARK
+};
+
+struct __condition {
+    char name[32];
+    enum condition_type type;
+    __u32 value;
+};
+
+// Represents the information required to compute the next transition.
+struct transition {
+    char name[32];
+    struct __condition cond;
+    __u32 mark;
+    __u8 next_hop[ETH_ALEN];
+};
+
 struct bpf_map_def SEC("maps") route_map = {
     .type = BPF_MAP_TYPE_HASH,
     .key_size = KEY_SIZE,
@@ -18,15 +36,9 @@ struct bpf_map_def SEC("maps") route_map = {
     .max_entries = MAX_NODES,
 };
 
-struct bpf_map_def SEC("maps") tx_port = {
-    .type = BPF_MAP_TYPE_DEVMAP,
-    .key_size = sizeof(unsigned int),
-    .value_size = sizeof(unsigned int),
-    .max_entries = MAX_NODES,
-};
 
 SEC("tc")
-int tc_egress(struct __sk_buff *skb)
+int tc_ingress(struct __sk_buff *skb)
 {
     void *data_end = (void *)(unsigned long long)skb->data_end;
 	void *data = (void *)(unsigned long long)skb->data;
@@ -39,6 +51,7 @@ int tc_egress(struct __sk_buff *skb)
     if (data + sizeof(struct iphdr) > data_end)
         return TC_ACT_SHOT;
     
+    bpf_printk("GOT here!!!!\n");
     // char key [KEY_SIZE];
     // snprintf(key, KEY_SIZE, "%d%d", ip->saddr, skb->ifindex);
 
