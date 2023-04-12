@@ -11,7 +11,7 @@ const int IPV4_ALEN = 4;
 const int KEY_SIZE = sizeof(unsigned int) + IPV4_ALEN + 1;
 
 enum condition_type {
-    L7PROTOCOL,
+    L7_PROTOCOL_HTTPS,
     MARK
 };
 
@@ -22,20 +22,19 @@ struct __condition {
 };
 
 // Represents the information required to compute the next transition.
-struct transition {
+struct __transition {
     char name[32];
     struct __condition cond;
     __u32 mark;
-    __u8 next_hop[ETH_ALEN];
+    __u32 next_iface_idx;
 };
 
-struct bpf_map_def SEC("maps") route_map = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = KEY_SIZE,
-    .value_size = sizeof(unsigned int),
+struct bpf_map_def SEC("maps") transitions_maps = {
+    .type = BPF_MAP_TYPE_ARRAY,
+    .key_size = sizeof(__u32),
+    .value_size = sizeof(struct __transition),
     .max_entries = MAX_NODES,
 };
-
 
 SEC("tc")
 int tc_ingress(struct __sk_buff *skb)

@@ -30,9 +30,8 @@ marks:
   - name: "envoy"
     value: 100
 conditions:
-  - name: "envoy"
+  - name: "envoy-traffic"
     type: "mark"
     value: "envoy"
-  - name: "https"
-    type: "l7-protocol"
-    value: "https"
+  - name: "https-traffic"
+    type: "https-traffic"

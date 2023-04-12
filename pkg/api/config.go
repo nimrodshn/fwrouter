@@ -44,9 +44,9 @@ type Transition struct {
 	// The condition name used to match this transition.
 	Condition string `yaml:"condition"`
 	// The queue to be used for the next interface, represented by state in the state table.
-	Queue string `yaml:"ip,omitempty"`
+	Queue string `yaml:"queue"`
 	// The name of the next state.
 	Next string `yaml:"next"`
 	// The mark to be set on the packet.
-	Mark string `yaml:"condition,omitempty"`
+	Mark string `yaml:"mark"`
 }

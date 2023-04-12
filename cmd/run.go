@@ -8,11 +8,16 @@ import (
 
 	"fwrouter/pkg/ebpf"
 	"fwrouter/pkg/mappers"
+	"fwrouter/pkg/models"
 	"fwrouter/pkg/yaml"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/spf13/cobra"
 )
+
+const defaultIface = "eth0"
+
+var defaultKey uint32 = 0
 
 var runCmd = cobra.Command{
 	Use:   "run",
@@ -33,10 +38,11 @@ func runRouter(cmd *cobra.Command, args []string) {
 	}
 
 	// Load pre-compiled programs and maps into the kernel.
-	if err := ebpf.LoadObjects(); err != nil {
+	objs, err := ebpf.LoadObjects()
+	if err != nil {
 		log.Fatalf("Failed to load eBPF objects to kernel: %v", err)
 	}
-	defer ebpf.Detach()
+	defer objs.Detach()
 
 	parser := yaml.NewParser()
 	rawConfigFile, err := parser.Parse(configFile)
@@ -44,14 +50,30 @@ func runRouter(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to parse config file: '%s': %v", configFile, err)
 	}
 
-	_, err = mappers.MapConfig(rawConfigFile)
+	cfg, err := mappers.MapConfig(rawConfigFile)
 	if err != nil {
 		log.Fatalf("Failed to map config file: '%s': %v", configFile, err)
+	}
+
+	err = populateTransitionsMapping(cfg, objs)
+	if err != nil {
+		log.Fatalf("Failed to populate transitions mapping: %v", err)
 	}
 
 	log.Println("Waiting for events..")
 	<-setupSignalChannel()
 	log.Println("Exiting...")
+}
+
+func populateTransitionsMapping(cfg *models.Config, objs *ebpf.Objects) error {
+	for i, state := range cfg.States {
+		if state.InterfaceName == defaultIface {
+			for _, transition := range state.Transitions {
+				objs.UpdateTransitionsMap(uint32(i), ebpf.SerializeTransition(transition))
+			}
+		}
+	}
+	return nil
 }
 
 func setupSignalChannel() <-chan os.Signal {

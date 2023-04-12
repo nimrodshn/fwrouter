@@ -5,6 +5,7 @@ package ebpf
 
 import (
 	"fmt"
+	"fwrouter/pkg/models"
 	"net"
 
 	"github.com/vishvananda/netlink"
@@ -13,24 +14,49 @@ import (
 
 const defaultIface = "eth0"
 
-var filter netlink.Filter
-var qdisc netlink.Qdisc
+type ConditionType uint32
 
-func LoadObjects() error {
+const (
+	L7_PROTOCOL_HTTPS ConditionType = iota
+	MARK
+)
+
+// Represents a transition for the bpf to use in routing traffic.
+type Condition struct {
+	Name  [32]byte
+	Type  ConditionType
+	Value uint32
+}
+
+// Represents a transition for the bpf program to oversee.
+type Transition struct {
+	Name    [32]byte
+	Cond    Condition
+	Mark    uint32
+	NextHop uint32
+}
+
+type Objects struct {
+	objects ebpfObjects
+	filter  netlink.Filter
+	qdisc   netlink.Qdisc
+}
+
+func LoadObjects() (*Objects, error) {
 	objs := ebpfObjects{}
 	defer objs.Close()
 	if err := loadEbpfObjects(&objs, nil); err != nil {
-		return err
+		return nil, err
 	}
 
 	iface, err := net.InterfaceByName(defaultIface)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	nl, err := netlink.LinkByIndex(iface.Index)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Create a 'clsact' qdisc and attach it to our
@@ -38,19 +64,20 @@ func LoadObjects() error {
 	// to attach our bpf program on its ingress hook.
 	// This qdisc is a dummy providing the necessary ingress/egress
 	// hook points for our bpf program.
-	// For more information please see: https://docs.cilium.io/en/latest/bpf/progtypes/#tc-traffic-control
+	// For more information see the following articles: https://docs.cilium.io/en/latest/bpf/progtypes/#tc-traffic-control
+	// as well as https://lwn.net/Articles/671458/
 	attrs := netlink.QdiscAttrs{
 		LinkIndex: nl.Attrs().Index,
 		Handle:    netlink.MakeHandle(0xffff, 0),
 		Parent:    netlink.HANDLE_CLSACT,
 	}
-	qdisc = &netlink.GenericQdisc{
+	qdisc := &netlink.GenericQdisc{
 		QdiscAttrs: attrs,
 		QdiscType:  "clsact",
 	}
 
 	if err := netlink.QdiscAdd(qdisc); err != nil {
-		return fmt.Errorf("failed to add qdisc: %v", err.Error())
+		return nil, fmt.Errorf("failed to add qdisc: %v", err.Error())
 	}
 
 	filterattrs := netlink.FilterAttrs{
@@ -61,7 +88,7 @@ func LoadObjects() error {
 		Priority:  1,
 	}
 
-	filter = &netlink.BpfFilter{
+	filter := &netlink.BpfFilter{
 		FilterAttrs:  filterattrs,
 		Fd:           objs.TcIngress.FD(),
 		Name:         "tc_ingress",
@@ -70,18 +97,54 @@ func LoadObjects() error {
 
 	err = netlink.FilterAdd(filter)
 	if err != nil {
-		return fmt.Errorf("failed to add filter err: %v", err.Error())
+		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
+	}
+
+	return &Objects{
+		objects: objs,
+		filter:  filter,
+		qdisc:   qdisc,
+	}, nil
+}
+
+func (o *Objects) Detach() error {
+	err := netlink.FilterDel(o.filter)
+	if err != nil {
+		return fmt.Errorf("failed to delete filter %v: ", err)
+	}
+	if err := netlink.QdiscDel(o.qdisc); err != nil {
+		return fmt.Errorf("failed to delete qdisc: %v", err)
 	}
 	return nil
 }
 
-func Detach() error {
-	err := netlink.FilterDel(filter)
-	if err != nil {
-		return fmt.Errorf("failed to delete filter %v: ", err)
+func (o *Objects) UpdateTransitionsMap(key uint32, transition Transition) error {
+	return o.objects.TransitionsMaps.Put(key, transition)
+}
+
+func SerializeTransition(transition models.Transition) Transition {
+	return Transition{
+		Name:    [32]byte{},
+		Cond:    SerializeCondition(transition.Condition),
+		Mark:    uint32(transition.Mark.Value),
+		NextHop: uint32(transition.Next.InterfaceIdx),
 	}
-	if err := netlink.QdiscDel(qdisc); err != nil {
-		return fmt.Errorf("failed to delete qdisc: %v", err)
+}
+
+func SerializeCondition(condition models.Condition) Condition {
+	var res Condition
+	var conditionType ConditionType
+	var value uint32
+	switch condition.Type {
+	case models.MarkCondition:
+		conditionType = MARK
+		value = condition.Value.(uint32)
+	case models.HTTPSTrafficCondition:
+		conditionType = L7_PROTOCOL_HTTPS
 	}
-	return nil
+
+	copy(res.Name[:], []byte(condition.Name))
+	res.Type = conditionType
+	res.Value = uint32(value)
+	return res
 }

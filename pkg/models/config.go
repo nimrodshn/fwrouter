@@ -1,3 +1,7 @@
+// A General note:
+// Types in this package represent and intermidiate, easy to handle, structs that allow for easy handling and should be passed
+// throughout the codebase and are detached from outward facing YAML / RESTful APIs or from the BPF "lower level" representation.
+// This should make it easier to change the API or the BPF representations without having to change the entire codebase.
 package models
 
 type Config struct {
@@ -15,8 +19,8 @@ type Condition struct {
 type ConditionType string
 
 var (
-	L7ProtocolCondition ConditionType = "l7-protocol"
-	MarkCondition       ConditionType = "mark"
+	HTTPSTrafficCondition ConditionType = "https-traffic"
+	MarkCondition         ConditionType = "mark"
 )
 
 type Mark struct {
