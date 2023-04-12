@@ -1,31 +1,31 @@
 ---
----
 states:
   - name: "eth0"
     interface: "eth0"
     transitions:
-      - name: "https-traffic"
-        condition: "https"
-        next: "haproxy"
       - name: "default-traffic"
-        next": "envoy"
-        mark: "envoy"
+        action:
+          next-state: "envoy"
+          mark: "envoy"
   - name: "haproxy"
     interface: "haproxy0"
     transitions:
       - name: "default-traffic"
-        next": "idps"
+        action:
+          next-state: "idps"
   - name: "idps"
     interface: "idps0"
     transitions:
       - name: "past-envoy-traffic"
         condition: "envoy"
-        next: "eth0"
-        queue: "tx"
-      - name: "envoy-bound-traffic"
-        next: "eth0"
-        queue: "rx"
-        mark: "envoy"
+        action:
+          next-state: "eth0"
+          queue: "tx"
+      - name: "default-traffic"
+        action:  
+          next-state: "eth0"
+          queue: "rx"
+          mark: "envoy"
 marks:
   - name: "envoy"
     value: 100

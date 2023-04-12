@@ -19,37 +19,45 @@ type ConditionType uint32
 const (
 	L7_PROTOCOL_HTTPS ConditionType = iota
 	MARK
+	DEFAULT
 )
 
 // Represents a transition for the bpf to use in routing traffic.
 type Condition struct {
-	Name  [32]byte
 	Type  ConditionType
 	Value uint32
 }
 
 // Represents a transition for the bpf program to oversee.
 type Transition struct {
-	Name    [32]byte
 	Cond    Condition
 	Mark    uint32
 	NextHop uint32
 }
 
-type Objects struct {
+// A manager exposing API for handling our eBPF loaded maps and programs.
+type ObjectsManager interface {
+	Detach() error
+	UpdateDefaultTransitionMap(key uint32, transition Transition) error
+	UpdateTransitionsLengthMap(key uint32, len uint32) error
+	UpdateTransitionsMap(key uint32, transition Transition) error
+}
+
+type DefaultObjectsManager struct {
 	objects ebpfObjects
 	filter  netlink.Filter
 	qdisc   netlink.Qdisc
 }
 
-func LoadObjects() (*Objects, error) {
+// LoadObjects loads the eBPF program to kernel and attaches it to the newly created
+// filter on the qdisc of the provided interface and returns a Manager providing API for managing and interacting with the eBPF program (via maps).
+func LoadObjects(ifac string) (ObjectsManager, error) {
 	objs := ebpfObjects{}
-	defer objs.Close()
 	if err := loadEbpfObjects(&objs, nil); err != nil {
 		return nil, err
 	}
 
-	iface, err := net.InterfaceByName(defaultIface)
+	iface, err := net.InterfaceByName(ifac)
 	if err != nil {
 		return nil, err
 	}
@@ -100,14 +108,17 @@ func LoadObjects() (*Objects, error) {
 		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
 	}
 
-	return &Objects{
+	return &DefaultObjectsManager{
 		objects: objs,
 		filter:  filter,
 		qdisc:   qdisc,
 	}, nil
 }
 
-func (o *Objects) Detach() error {
+func (o *DefaultObjectsManager) Detach() error {
+	if err := o.objects.Close(); err != nil {
+		return fmt.Errorf("failed to remove eBPF program: %v", err)
+	}
 	err := netlink.FilterDel(o.filter)
 	if err != nil {
 		return fmt.Errorf("failed to delete filter %v: ", err)
@@ -118,16 +129,23 @@ func (o *Objects) Detach() error {
 	return nil
 }
 
-func (o *Objects) UpdateTransitionsMap(key uint32, transition Transition) error {
-	return o.objects.TransitionsMaps.Put(key, transition)
+func (o *DefaultObjectsManager) UpdateTransitionsMap(key uint32, transition Transition) error {
+	return o.objects.Transitions.Put(key, transition)
+}
+
+func (o *DefaultObjectsManager) UpdateDefaultTransitionMap(key uint32, transition Transition) error {
+	return o.objects.DefaultTransition.Put(key, transition)
+}
+
+func (o *DefaultObjectsManager) UpdateTransitionsLengthMap(key uint32, len uint32) error {
+	return o.objects.TransitionsLen.Put(key, len)
 }
 
 func SerializeTransition(transition models.Transition) Transition {
 	return Transition{
-		Name:    [32]byte{},
 		Cond:    SerializeCondition(transition.Condition),
-		Mark:    uint32(transition.Mark.Value),
-		NextHop: uint32(transition.Next.InterfaceIdx),
+		Mark:    transition.Action.Mark.Value,
+		NextHop: uint32(transition.Action.NextState.InterfaceIdx),
 	}
 }
 
@@ -141,9 +159,10 @@ func SerializeCondition(condition models.Condition) Condition {
 		value = condition.Value.(uint32)
 	case models.HTTPSTrafficCondition:
 		conditionType = L7_PROTOCOL_HTTPS
+	default:
+		conditionType = DEFAULT
 	}
 
-	copy(res.Name[:], []byte(condition.Name))
 	res.Type = conditionType
 	res.Value = uint32(value)
 	return res

@@ -1,0 +1,15 @@
+---
+states:
+  - name: "eth0"
+    interface: "eth0"
+    transitions:
+      - name: "default-traffic-to-idps"
+        action:
+          next-state: "idps"
+          mark: "envoy"
+        default: true
+  - name: "idps"
+    interface: "idps0"
+marks:
+  - name: "envoy"
+    value: 100

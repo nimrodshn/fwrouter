@@ -50,15 +50,15 @@ func MapConfig(config *api.Config) (*models.Config, error) {
 	for _, state := range config.States {
 		for i, transition := range state.Transitions {
 			var transitionToAdd models.Transition
-			if _, ok := statesMap[transition.Next]; !ok {
-				return nil, fmt.Errorf("failed to find state '%s', for transition '%s' in state '%s'", transition.Next, transition.Name, state.Name)
+			if _, ok := statesMap[transition.Action.NextState]; !ok {
+				return nil, fmt.Errorf("failed to find state '%s', for transition '%s' in state '%s'", transition.Action.NextState, transition.Name, state.Name)
 			}
 
-			if transition.Mark != "" {
-				if mark, ok := marksMap[transition.Mark]; ok {
-					transitionToAdd.Mark = mark
+			if transition.Action.Mark != "" {
+				if mark, ok := marksMap[transition.Action.Mark]; ok {
+					transitionToAdd.Action.Mark = mark
 				} else {
-					return nil, fmt.Errorf("failed to find mark '%s', for transition '%s' in state '%s'", transition.Mark, transition.Name, state.Name)
+					return nil, fmt.Errorf("failed to find mark '%s', for transition '%s' in state '%s'", transition.Action.Mark, transition.Name, state.Name)
 				}
 			}
 
@@ -70,10 +70,11 @@ func MapConfig(config *api.Config) (*models.Config, error) {
 				}
 			}
 
-			nextState := statesMap[transition.Next]
-			transitionToAdd.Next = &nextState
+			nextState := statesMap[transition.Action.NextState]
+			transitionToAdd.Action.NextState = &nextState
+			transitionToAdd.Action.Queue = transition.Action.Queue
 			transitionToAdd.Name = transition.Name
-			transitionToAdd.Queue = transition.Queue
+			transitionToAdd.Default = transition.Default
 			statesMap[state.Name].Transitions[i] = transitionToAdd
 		}
 		res.States = append(res.States, statesMap[state.Name])

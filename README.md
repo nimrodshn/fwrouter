@@ -29,6 +29,9 @@ sudo ln -s /usr/bin/llvm-strip-10 /usr/bin/llvm-strip
 sudo ln -s /usr/bin/clang-10 /usr/bin/clang
 ```
 
+## Debugging maps, programs, etc.
+Use the `bpftool` to debug maps, programs, etc.
+To download run: `sudo apt install linux-tools-common`.
 
 ## Where are my 'bpf_printk' logs?
 Run the following command: `sudo cat /sys/kernel/debug/tracing/trace_pipe`

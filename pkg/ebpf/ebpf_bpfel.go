@@ -61,7 +61,9 @@ type ebpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
-	TransitionsMaps *ebpf.MapSpec `ebpf:"transitions_maps"`
+	DefaultTransition *ebpf.MapSpec `ebpf:"default_transition"`
+	Transitions       *ebpf.MapSpec `ebpf:"transitions"`
+	TransitionsLen    *ebpf.MapSpec `ebpf:"transitions_len"`
 }
 
 // ebpfObjects contains all objects after they have been loaded into the kernel.
@@ -83,12 +85,16 @@ func (o *ebpfObjects) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
-	TransitionsMaps *ebpf.Map `ebpf:"transitions_maps"`
+	DefaultTransition *ebpf.Map `ebpf:"default_transition"`
+	Transitions       *ebpf.Map `ebpf:"transitions"`
+	TransitionsLen    *ebpf.Map `ebpf:"transitions_len"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
-		m.TransitionsMaps,
+		m.DefaultTransition,
+		m.Transitions,
+		m.TransitionsLen,
 	)
 }
 

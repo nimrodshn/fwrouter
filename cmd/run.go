@@ -37,13 +37,6 @@ func runRouter(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to remove memory lock: %v", err)
 	}
 
-	// Load pre-compiled programs and maps into the kernel.
-	objs, err := ebpf.LoadObjects()
-	if err != nil {
-		log.Fatalf("Failed to load eBPF objects to kernel: %v", err)
-	}
-	defer objs.Detach()
-
 	parser := yaml.NewParser()
 	rawConfigFile, err := parser.Parse(configFile)
 	if err != nil {
@@ -55,9 +48,23 @@ func runRouter(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to map config file: '%s': %v", configFile, err)
 	}
 
-	err = populateTransitionsMapping(cfg, objs)
-	if err != nil {
-		log.Fatalf("Failed to populate transitions mapping: %v", err)
+	// Load pre-compiled programs and populate maps.
+	for _, state := range cfg.States {
+		if state.Transitions == nil || len(state.Transitions) == 0 {
+			continue
+		}
+
+		log.Printf("Loading eBPF objects for interface: %s", state.InterfaceName)
+		objsManager, err := ebpf.LoadObjects(state.InterfaceName)
+		if err != nil {
+			log.Fatalf("Failed to load eBPF objects to kernel: %v", err)
+		}
+		defer objsManager.Detach()
+
+		err = populateTransitionsMapping(cfg, objsManager)
+		if err != nil {
+			log.Fatalf("Failed to populate transitions mapping: %v", err)
+		}
 	}
 
 	log.Println("Waiting for events..")
@@ -65,12 +72,29 @@ func runRouter(cmd *cobra.Command, args []string) {
 	log.Println("Exiting...")
 }
 
-func populateTransitionsMapping(cfg *models.Config, objs *ebpf.Objects) error {
-	for i, state := range cfg.States {
-		if state.InterfaceName == defaultIface {
-			for _, transition := range state.Transitions {
-				objs.UpdateTransitionsMap(uint32(i), ebpf.SerializeTransition(transition))
+func populateTransitionsMapping(cfg *models.Config, objsManager ebpf.ObjectsManager) error {
+	for _, state := range cfg.States {
+		var idx uint32 = 0
+		for _, transition := range state.Transitions {
+			if transition.Default {
+				var defaultKey uint32 = 0
+				err := objsManager.UpdateDefaultTransitionMap(defaultKey, ebpf.SerializeTransition(transition))
+				if err != nil {
+					return err
+				}
+				continue
 			}
+
+			err := objsManager.UpdateTransitionsMap(idx, ebpf.SerializeTransition(transition))
+			if err != nil {
+				return err
+			}
+
+			err = objsManager.UpdateTransitionsLengthMap(0, idx)
+			if err != nil {
+				return err
+			}
+			idx++
 		}
 	}
 	return nil

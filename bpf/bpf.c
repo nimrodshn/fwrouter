@@ -7,33 +7,45 @@
 
 #define MAX_NODES 256
 
-const int IPV4_ALEN = 4;
-const int KEY_SIZE = sizeof(unsigned int) + IPV4_ALEN + 1;
-
 enum condition_type {
     L7_PROTOCOL_HTTPS,
-    MARK
+    MARK,
+    DEFAULT
 };
 
 struct __condition {
-    char name[32];
     enum condition_type type;
     __u32 value;
 };
 
 // Represents the information required to compute the next transition.
 struct __transition {
-    char name[32];
     struct __condition cond;
     __u32 mark;
     __u32 next_iface_idx;
 };
 
-struct bpf_map_def SEC("maps") transitions_maps = {
+struct bpf_map_def SEC("maps") transitions = {
     .type = BPF_MAP_TYPE_ARRAY,
     .key_size = sizeof(__u32),
     .value_size = sizeof(struct __transition),
     .max_entries = MAX_NODES,
+};
+
+// To differentiate between "regular" transitions and the default one we keep a separate map just for the default transition.
+struct bpf_map_def SEC("maps") default_transition = {
+    .type = BPF_MAP_TYPE_ARRAY,
+    .key_size = sizeof(__u32),
+    .value_size = sizeof(struct __transition),
+    .max_entries = 1,
+};
+
+// There is no simple way or interface to get the number of elements in a map from the kernel so the user space has to report it.
+struct bpf_map_def SEC("maps") transitions_len = {
+    .type = BPF_MAP_TYPE_ARRAY,
+    .key_size = sizeof(__u32),
+    .value_size = sizeof(__u32),
+    .max_entries = 1,
 };
 
 SEC("tc")
@@ -50,14 +62,12 @@ int tc_ingress(struct __sk_buff *skb)
     if (data + sizeof(struct iphdr) > data_end)
         return TC_ACT_SHOT;
     
-    bpf_printk("GOT here!!!!\n");
-    // char key [KEY_SIZE];
-    // snprintf(key, KEY_SIZE, "%d%d", ip->saddr, skb->ifindex);
-
-    // int *ifidx = bpf_map_lookup_elem(&route_map, &key);
-    // if (ifidx) {
-    //     return bpf_redirect_map(&tx_port, *ifidx, 0);    
-    // }
+    __u32 default_key = 0;
+    struct __transition *default_destination = bpf_map_lookup_elem(&default_transition, &default_key);
+    if ( default_destination != NULL ) {
+        bpf_printk("Routing traffic to interface: %d\n", default_destination->next_iface_idx);
+        return bpf_clone_redirect(skb, default_destination->next_iface_idx, BPF_F_INGRESS);    
+    }
     return TC_ACT_OK;
 }
 
