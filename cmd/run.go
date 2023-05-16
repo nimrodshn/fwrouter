@@ -61,7 +61,7 @@ func runRouter(cmd *cobra.Command, args []string) {
 		}
 		defer objsManager.Detach()
 
-		err = populateTransitionsMapping(cfg, objsManager)
+		err = populateTransitionsMapping(state, objsManager)
 		if err != nil {
 			log.Fatalf("Failed to populate transitions mapping: %v", err)
 		}
@@ -72,32 +72,59 @@ func runRouter(cmd *cobra.Command, args []string) {
 	log.Println("Exiting...")
 }
 
-func populateTransitionsMapping(cfg *models.Config, objsManager ebpf.ObjectsManager) error {
-	for _, state := range cfg.States {
-		var idx uint32 = 0
-		for _, transition := range state.Transitions {
-			if transition.Default {
-				var defaultKey uint32 = 0
-				err := objsManager.UpdateDefaultTransitionMap(defaultKey, ebpf.SerializeTransition(transition))
-				if err != nil {
-					return err
-				}
-				continue
+func populateTransitionsMapping(state models.State, objsManager ebpf.ObjectsManager) error {
+	var err error
+	var ingressCount uint32
+	var egressCount uint32
+	for _, transition := range state.Transitions {
+		log.Printf("Populating transition for state '%s': %+v", state.Name, transition)
+		switch transition.Queue {
+		case models.QueueTypeIngress:
+			if ingressCount, err = UpdateIngressTransition(transition, objsManager, ingressCount); err != nil {
+				return err
 			}
-
-			err := objsManager.UpdateTransitionsMap(idx, ebpf.SerializeTransition(transition))
+			err = objsManager.UpdateIngressTransitionsLengthMap(0, ingressCount)
 			if err != nil {
 				return err
 			}
-
-			err = objsManager.UpdateTransitionsLengthMap(0, idx)
+		case models.QueueTypeEgress:
+			if egressCount, err = UpdateEgressTransition(transition, objsManager, egressCount); err != nil {
+				return err
+			}
+			err = objsManager.UpdateEgressTransitionsLengthMap(0, egressCount)
 			if err != nil {
 				return err
 			}
-			idx++
 		}
 	}
+
 	return nil
+}
+
+func UpdateEgressTransition(transition models.Transition, objsManager ebpf.ObjectsManager, transitionIdx uint32) (uint32, error) {
+	if transition.Default {
+		var defaultKey uint32 = 0
+		return transitionIdx, objsManager.UpdateEgressDefaultTransitionMap(defaultKey, ebpf.SerializeTransition(transition))
+	}
+
+	err := objsManager.UpdateEgressTransitionsMap(transitionIdx, ebpf.SerializeTransition(transition))
+	if err != nil {
+		return transitionIdx + 1, nil
+	}
+	return transitionIdx, nil
+}
+
+func UpdateIngressTransition(transition models.Transition, objsManager ebpf.ObjectsManager, transitionIdx uint32) (uint32, error) {
+	if transition.Default {
+		var defaultKey uint32 = 0
+		return transitionIdx, objsManager.UpdateIngressDefaultTransitionMap(defaultKey, ebpf.SerializeTransition(transition))
+	}
+
+	err := objsManager.UpdateIngressTransitionsMap(transitionIdx, ebpf.SerializeTransition(transition))
+	if err != nil {
+		return transitionIdx + 1, nil
+	}
+	return transitionIdx, nil
 }
 
 func setupSignalChannel() <-chan os.Signal {

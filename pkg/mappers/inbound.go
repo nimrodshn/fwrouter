@@ -70,6 +70,12 @@ func MapConfig(config *api.Config) (*models.Config, error) {
 				}
 			}
 
+			// Default to ingress queue if no queue is specified.
+			if transition.Queue == "" {
+				transitionToAdd.Queue = models.QueueTypeIngress
+			} else {
+				transitionToAdd.Queue = models.QueueType(transition.Queue)
+			}
 			nextState := statesMap[transition.Action.NextState]
 			transitionToAdd.Action.NextState = &nextState
 			transitionToAdd.Action.Queue = transition.Action.Queue

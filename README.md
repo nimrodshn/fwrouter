@@ -37,7 +37,7 @@ To download run: `sudo apt install linux-tools-common`.
 Run the following command: `sudo cat /sys/kernel/debug/tracing/trace_pipe`
 
 ## How to run `fwrouter`?
-Compile the program using `make`, followed by: `sudo ./fwrouter run --config-file=./examples/test.yaml`
+Compile the program using `make`, followed by: `sudo ./fwrouter run --config-file=./examples/idps.yaml`
 
 ## How to define a state machine for packet flow?
 The following is an example of how to define a [state-transition table](https://en.wikipedia.org/wiki/State-transition_table) for packet flow in the firewall. States in the following transition table are represented as physical / virtual interfaces and thus, 
@@ -48,43 +48,28 @@ states:
   - name: "eth0"
     interface: "eth0"
     transitions:
-      - name: "https-traffic"
-        condition: "https"
-        next: "haproxy"
-      - name: "default-traffic"
-        next": "envoy"
-        mark: "envoy"
-  - name: "haproxy"
-    interface: "haproxy0"
+      - name: "default-traffic-to-idps"
+        action:
+          next-state: "veth0"
+          queue: "ingress"
+        default: true
+        queue: "ingress"
+  - name: "veth0"
+    interface: "veth0"
+  - name: "veth1"
+    interface: "veth1"
     transitions:
-      - name: "default-traffic"
-        next": "idps"
-  - name: "idps"
-    interface: "idps0"
-    transitions:
-      - name: "past-envoy-traffic"
-        condition: "envoy"
-        next: "eth0"
-        queue: "tx"
-      - name: "envoy-bound-traffic"
-        next: "eth0"
-        queue: "rx"
-        mark: "envoy"
-marks:
-  - name: "envoy"
-    value: 100
-conditions:
-  - name: "envoy"
-    type: "mark"
-    value: "envoy"
-  - name: "https"
-    type: "l7 protocol"
-    value: "https"
+      - name: "default-traffic-to-eth0"
+        action:
+          next-state: "eth0"
+          queue: "egress"
+        default: true
+        queue: "egress"
 ```
 
 The above transition table describes the following diagram: 
 
-![packet-flow](/docs/dpv2doodle.jpg)
+![packet-flow](./docs/idps-afpacket.jpg)
 
 The router will do its best effort to find interfaces for services if they are not provided in the config file.
 The router will route traffic according to the order in the routes provided.

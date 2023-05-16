@@ -5,11 +5,18 @@ states:
     transitions:
       - name: "default-traffic-to-idps"
         action:
-          next-state: "idps"
-          mark: "envoy"
+          next-state: "dummy0"
+          queue: "ingress"
         default: true
-  - name: "idps"
-    interface: "idps0"
-marks:
-  - name: "envoy"
-    value: 100
+        queue: "ingress"
+  - name: "dummy0"
+    interface: "dummy0"
+  - name: "dummy1"
+    interface: "dummy1"
+    transitions:
+      - name: "default-traffic-to-eth0"
+        action:
+          next-state: "eth0"
+          queue: "egress"
+        default: true
+        queue: "egress"

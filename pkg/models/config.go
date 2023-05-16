@@ -28,6 +28,16 @@ var (
 	MarkCondition         ConditionType = "mark"
 )
 
+// A QueueType is an enum for the different queue types used by transitions.
+type QueueType string
+
+const (
+	// QueueTypeIngress represents an ingress queue.
+	QueueTypeIngress QueueType = "ingress"
+	// QueueTypeEgress represents an egress queue.
+	QueueTypeEgress QueueType = "egress"
+)
+
 // A Mark represents a mark which is either *attached* to a packet transitioning from on state to another in the state table,
 // conversly, used to match against a packet by a specific Condition.
 type Mark struct {
@@ -46,6 +56,7 @@ type State struct {
 // A Transition represents a transition of packets from one State (interface) to another.
 type Transition struct {
 	Name      string
+	Queue     QueueType
 	Condition Condition
 	Action    Action
 	Default   bool

@@ -45,6 +45,8 @@ type Transition struct {
 	Condition string `yaml:"condition"`
 	// The action to be taken when this transition is matched.
 	Action Action `yaml:"action"`
+	// Queue to be used for this transition.
+	Queue string `yaml:"queue"`
 	// The action to be taken when this transition is matched.
 	Default bool `yaml:"default"`
 }

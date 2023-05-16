@@ -54,6 +54,7 @@ type ebpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfProgramSpecs struct {
+	TcEgress  *ebpf.ProgramSpec `ebpf:"tc_egress"`
 	TcIngress *ebpf.ProgramSpec `ebpf:"tc_ingress"`
 }
 
@@ -61,9 +62,12 @@ type ebpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
-	DefaultTransition *ebpf.MapSpec `ebpf:"default_transition"`
-	Transitions       *ebpf.MapSpec `ebpf:"transitions"`
-	TransitionsLen    *ebpf.MapSpec `ebpf:"transitions_len"`
+	DefaultEgressTransition  *ebpf.MapSpec `ebpf:"default_egress_transition"`
+	DefaultIngressTransition *ebpf.MapSpec `ebpf:"default_ingress_transition"`
+	EgressTransitions        *ebpf.MapSpec `ebpf:"egress_transitions"`
+	EgressTransitionsLen     *ebpf.MapSpec `ebpf:"egress_transitions_len"`
+	IngressTransitions       *ebpf.MapSpec `ebpf:"ingress_transitions"`
+	IngressTransitionsLen    *ebpf.MapSpec `ebpf:"ingress_transitions_len"`
 }
 
 // ebpfObjects contains all objects after they have been loaded into the kernel.
@@ -85,16 +89,22 @@ func (o *ebpfObjects) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
-	DefaultTransition *ebpf.Map `ebpf:"default_transition"`
-	Transitions       *ebpf.Map `ebpf:"transitions"`
-	TransitionsLen    *ebpf.Map `ebpf:"transitions_len"`
+	DefaultEgressTransition  *ebpf.Map `ebpf:"default_egress_transition"`
+	DefaultIngressTransition *ebpf.Map `ebpf:"default_ingress_transition"`
+	EgressTransitions        *ebpf.Map `ebpf:"egress_transitions"`
+	EgressTransitionsLen     *ebpf.Map `ebpf:"egress_transitions_len"`
+	IngressTransitions       *ebpf.Map `ebpf:"ingress_transitions"`
+	IngressTransitionsLen    *ebpf.Map `ebpf:"ingress_transitions_len"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
-		m.DefaultTransition,
-		m.Transitions,
-		m.TransitionsLen,
+		m.DefaultEgressTransition,
+		m.DefaultIngressTransition,
+		m.EgressTransitions,
+		m.EgressTransitionsLen,
+		m.IngressTransitions,
+		m.IngressTransitionsLen,
 	)
 }
 
@@ -102,11 +112,13 @@ func (m *ebpfMaps) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfPrograms struct {
+	TcEgress  *ebpf.Program `ebpf:"tc_egress"`
 	TcIngress *ebpf.Program `ebpf:"tc_ingress"`
 }
 
 func (p *ebpfPrograms) Close() error {
 	return _EbpfClose(
+		p.TcEgress,
 		p.TcIngress,
 	)
 }

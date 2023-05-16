@@ -5,48 +5,29 @@ package ebpf
 
 import (
 	"fmt"
-	"fwrouter/pkg/models"
+	"log"
 	"net"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
 
-const defaultIface = "eth0"
-
-type ConditionType uint32
-
-const (
-	L7_PROTOCOL_HTTPS ConditionType = iota
-	MARK
-	DEFAULT
-)
-
-// Represents a transition for the bpf to use in routing traffic.
-type Condition struct {
-	Type  ConditionType
-	Value uint32
-}
-
-// Represents a transition for the bpf program to oversee.
-type Transition struct {
-	Cond    Condition
-	Mark    uint32
-	NextHop uint32
-}
-
 // A manager exposing API for handling our eBPF loaded maps and programs.
 type ObjectsManager interface {
 	Detach() error
-	UpdateDefaultTransitionMap(key uint32, transition Transition) error
-	UpdateTransitionsLengthMap(key uint32, len uint32) error
-	UpdateTransitionsMap(key uint32, transition Transition) error
+	UpdateIngressTransitionsMap(key uint32, transition Transition) error
+	UpdateEgressTransitionsMap(key uint32, transition Transition) error
+	UpdateIngressDefaultTransitionMap(key uint32, transition Transition) error
+	UpdateEgressDefaultTransitionMap(key uint32, transition Transition) error
+	UpdateIngressTransitionsLengthMap(key uint32, len uint32) error
+	UpdateEgressTransitionsLengthMap(key uint32, len uint32) error
 }
 
 type DefaultObjectsManager struct {
-	objects ebpfObjects
-	filter  netlink.Filter
-	qdisc   netlink.Qdisc
+	objects       ebpfObjects
+	ingressFilter netlink.Filter
+	egressFilter  netlink.Filter
+	qdisc         netlink.Qdisc
 }
 
 // LoadObjects loads the eBPF program to kernel and attaches it to the newly created
@@ -88,7 +69,7 @@ func LoadObjects(ifac string) (ObjectsManager, error) {
 		return nil, fmt.Errorf("failed to add qdisc: %v", err.Error())
 	}
 
-	filterattrs := netlink.FilterAttrs{
+	filterIngressAttrs := netlink.FilterAttrs{
 		LinkIndex: nl.Attrs().Index,
 		Parent:    netlink.HANDLE_MIN_INGRESS,
 		Handle:    netlink.MakeHandle(0, 1),
@@ -96,22 +77,43 @@ func LoadObjects(ifac string) (ObjectsManager, error) {
 		Priority:  1,
 	}
 
-	filter := &netlink.BpfFilter{
-		FilterAttrs:  filterattrs,
+	filterEgressAttrs := netlink.FilterAttrs{
+		LinkIndex: nl.Attrs().Index,
+		Parent:    netlink.HANDLE_MIN_EGRESS,
+		Handle:    netlink.MakeHandle(0, 1),
+		Protocol:  unix.ETH_P_ALL,
+		Priority:  1,
+	}
+
+	filterIngress := &netlink.BpfFilter{
+		FilterAttrs:  filterIngressAttrs,
 		Fd:           objs.TcIngress.FD(),
 		Name:         "tc_ingress",
 		DirectAction: true,
 	}
 
-	err = netlink.FilterAdd(filter)
+	err = netlink.FilterAdd(filterIngress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
+	}
+
+	filterEgress := &netlink.BpfFilter{
+		FilterAttrs:  filterEgressAttrs,
+		Fd:           objs.TcEgress.FD(),
+		Name:         "tc_egress",
+		DirectAction: true,
+	}
+
+	err = netlink.FilterAdd(filterEgress)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
 	}
 
 	return &DefaultObjectsManager{
-		objects: objs,
-		filter:  filter,
-		qdisc:   qdisc,
+		objects:       objs,
+		ingressFilter: filterIngress,
+		egressFilter:  filterEgress,
+		qdisc:         qdisc,
 	}, nil
 }
 
@@ -119,8 +121,10 @@ func (o *DefaultObjectsManager) Detach() error {
 	if err := o.objects.Close(); err != nil {
 		return fmt.Errorf("failed to remove eBPF program: %v", err)
 	}
-	err := netlink.FilterDel(o.filter)
-	if err != nil {
+	if err := netlink.FilterDel(o.ingressFilter); err != nil {
+		return fmt.Errorf("failed to delete filter %v: ", err)
+	}
+	if err := netlink.FilterDel(o.egressFilter); err != nil {
 		return fmt.Errorf("failed to delete filter %v: ", err)
 	}
 	if err := netlink.QdiscDel(o.qdisc); err != nil {
@@ -129,41 +133,30 @@ func (o *DefaultObjectsManager) Detach() error {
 	return nil
 }
 
-func (o *DefaultObjectsManager) UpdateTransitionsMap(key uint32, transition Transition) error {
-	return o.objects.Transitions.Put(key, transition)
+func (o *DefaultObjectsManager) UpdateIngressTransitionsMap(key uint32, transition Transition) error {
+	log.Printf("Updating ingress transition map with key '%d': %+v", key, transition)
+	return o.objects.IngressTransitions.Put(key, transition)
 }
 
-func (o *DefaultObjectsManager) UpdateDefaultTransitionMap(key uint32, transition Transition) error {
-	return o.objects.DefaultTransition.Put(key, transition)
+func (o *DefaultObjectsManager) UpdateIngressDefaultTransitionMap(key uint32, transition Transition) error {
+	log.Printf("Updating ingress default transition map with key '%d': %+v", key, transition)
+	return o.objects.DefaultIngressTransition.Put(key, transition)
 }
 
-func (o *DefaultObjectsManager) UpdateTransitionsLengthMap(key uint32, len uint32) error {
-	return o.objects.TransitionsLen.Put(key, len)
+func (o *DefaultObjectsManager) UpdateIngressTransitionsLengthMap(key uint32, len uint32) error {
+	return o.objects.IngressTransitionsLen.Put(key, len)
 }
 
-func SerializeTransition(transition models.Transition) Transition {
-	return Transition{
-		Cond:    SerializeCondition(transition.Condition),
-		Mark:    transition.Action.Mark.Value,
-		NextHop: uint32(transition.Action.NextState.InterfaceIdx),
-	}
+func (o *DefaultObjectsManager) UpdateEgressTransitionsMap(key uint32, transition Transition) error {
+	log.Printf("Updating egress transition map with key '%d': %+v", key, transition)
+	return o.objects.EgressTransitions.Put(key, transition)
 }
 
-func SerializeCondition(condition models.Condition) Condition {
-	var res Condition
-	var conditionType ConditionType
-	var value uint32
-	switch condition.Type {
-	case models.MarkCondition:
-		conditionType = MARK
-		value = condition.Value.(uint32)
-	case models.HTTPSTrafficCondition:
-		conditionType = L7_PROTOCOL_HTTPS
-	default:
-		conditionType = DEFAULT
-	}
+func (o *DefaultObjectsManager) UpdateEgressDefaultTransitionMap(key uint32, transition Transition) error {
+	log.Printf("Updating egress default transition map with key '%d': %+v", key, transition)
+	return o.objects.DefaultEgressTransition.Put(key, transition)
+}
 
-	res.Type = conditionType
-	res.Value = uint32(value)
-	return res
+func (o *DefaultObjectsManager) UpdateEgressTransitionsLengthMap(key uint32, len uint32) error {
+	return o.objects.EgressTransitionsLen.Put(key, len)
 }
