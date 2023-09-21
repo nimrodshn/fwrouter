@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "bpf_helpers.h": "c"
+        "bpf_helpers.h": "c",
+        "type_traits": "c"
     }
 }

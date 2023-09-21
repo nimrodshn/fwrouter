@@ -1,9 +1,7 @@
 package api
 
 type Config struct {
-	States     []State
-	Marks      []Mark
-	Conditions []Condition
+	Interfaces []Interface `yaml:"interfaces"`
 }
 
 type Condition struct {
@@ -12,7 +10,7 @@ type Condition struct {
 	// The type of the condition.
 	Type ConditionType
 	// The value to be matched against.
-	Value interface{}
+	Match interface{}
 }
 
 type ConditionType string
@@ -20,6 +18,7 @@ type ConditionType string
 var (
 	L7ProtocolCondition ConditionType = "l7-protocol"
 	MarkCondition       ConditionType = "mark"
+	DefaultCondition    ConditionType = "default"
 )
 
 type Mark struct {
@@ -29,33 +28,27 @@ type Mark struct {
 	Value uint32
 }
 
-type State struct {
-	// The name of the state (e.g "idps", "envoy", "eth0", etc.).
+type Interface struct {
+	// The name of the interface (e.g "eth0", etc.).
 	Name string `yaml:"name"`
-	// The name of the interface to be used for this state.
-	InterfaceName string `yaml:"interface"`
-	// The set of transitions for this state.
-	Transitions []Transition `yaml:"transitions"`
+	// The transitions to apply to this interface.
+	Transition *Transition `yaml:"transition,omitempty"`
 }
 
 type Transition struct {
 	// The name of the transition.
-	Name string
+	Name string `yaml:"name"`
 	// The condition name used to match this transition.
-	Condition string `yaml:"condition"`
+	Condition *Condition `yaml:"condition,omitempty"`
 	// The action to be taken when this transition is matched.
 	Action Action `yaml:"action"`
 	// Queue to be used for this transition.
 	Queue string `yaml:"queue"`
-	// The action to be taken when this transition is matched.
-	Default bool `yaml:"default"`
 }
 
 type Action struct {
 	// The name of the next state.
-	NextState string `yaml:"next-state"`
+	NextInterface string `yaml:"next-interface"`
 	// The queue to be used for the next interface, represented by state in the state table.
 	Queue string `yaml:"queue"`
-	// The mark to be set on the packet.
-	Mark string `yaml:"mark"`
 }

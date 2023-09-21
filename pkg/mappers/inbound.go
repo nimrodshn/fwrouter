@@ -1,7 +1,6 @@
 package mappers
 
 import (
-	"fmt"
 	"fwrouter/pkg/api"
 	"fwrouter/pkg/iface"
 	"fwrouter/pkg/models"
@@ -10,80 +9,52 @@ import (
 func MapConfig(config *api.Config) (*models.Config, error) {
 	res := &models.Config{}
 
-	conditionsMap := make(map[string]models.Condition)
-	for _, condition := range config.Conditions {
-		conditionToAdd := models.Condition{
-			Name:  condition.Name,
-			Type:  models.ConditionType(condition.Type),
-			Value: condition.Value,
-		}
-		res.Conditions = append(res.Conditions, conditionToAdd)
-		conditionsMap[condition.Name] = conditionToAdd
-	}
-
-	marksMap := make(map[string]models.Mark)
-	for _, mark := range config.Marks {
-		markToAdd := models.Mark{
-			Name:  mark.Name,
-			Value: mark.Value,
-		}
-		res.Marks = append(res.Marks, markToAdd)
-		marksMap[mark.Name] = markToAdd
-	}
-
-	statesMap := make(map[string]models.State)
-	for _, state := range config.States {
-		var stateToAdd models.State
-		stateToAdd.Name = state.Name
+	interfacesMap := make(map[string]models.Interface)
+	for _, intrfce := range config.Interfaces {
+		var ifaceToAdd models.Interface
+		ifaceToAdd.Name = intrfce.Name
 		// Verify the interface representing the state exists.
-		iface, err := iface.VerifyExists(state.InterfaceName)
+		iface, err := iface.VerifyExists(intrfce.Name)
 		if err != nil {
 			return nil, err
 		}
-		stateToAdd.InterfaceName = state.InterfaceName
-		stateToAdd.InterfaceIdx = iface.Attrs().Index
-		stateToAdd.Transitions = make([]models.Transition, len(state.Transitions))
-		statesMap[stateToAdd.Name] = stateToAdd
+		ifaceToAdd.InterfaceIdx = iface.Attrs().Index
+
+		if intrfce.Transition != nil {
+			ifaceToAdd.Transition = &models.Transition{}
+			ifaceToAdd.Transition.Name = intrfce.Transition.Name
+			if intrfce.Transition.Condition != nil {
+				ifaceToAdd.Transition.Condition = &models.Condition{}
+				ifaceToAdd.Transition.Condition.Name = intrfce.Transition.Condition.Name
+				ifaceToAdd.Transition.Condition.Type = models.ConditionType(intrfce.Transition.Condition.Type)
+				ifaceToAdd.Transition.Condition.Match = intrfce.Transition.Condition.Match
+				// Default to ingress queue if no queue is specified.
+				if intrfce.Transition.Queue == "" {
+					ifaceToAdd.Transition.Queue = models.QueueTypeIngress
+				} else {
+					switch intrfce.Transition.Queue {
+					case "ingress":
+						ifaceToAdd.Transition.Queue = models.QueueTypeIngress
+					case "egress":
+						ifaceToAdd.Transition.Queue = models.QueueTypeEgress
+					default:
+						ifaceToAdd.Transition.Queue = models.QueueTypeIngress
+					}
+				}
+				ifaceToAdd.Transition.Action.NextInterface.Name = intrfce.Transition.Action.NextInterface
+			}
+		}
+
+		interfacesMap[ifaceToAdd.Name] = ifaceToAdd
 	}
 
-	// Populate state transitions.
-	for _, state := range config.States {
-		for i, transition := range state.Transitions {
-			var transitionToAdd models.Transition
-			if _, ok := statesMap[transition.Action.NextState]; !ok {
-				return nil, fmt.Errorf("failed to find state '%s', for transition '%s' in state '%s'", transition.Action.NextState, transition.Name, state.Name)
-			}
-
-			if transition.Action.Mark != "" {
-				if mark, ok := marksMap[transition.Action.Mark]; ok {
-					transitionToAdd.Action.Mark = mark
-				} else {
-					return nil, fmt.Errorf("failed to find mark '%s', for transition '%s' in state '%s'", transition.Action.Mark, transition.Name, state.Name)
-				}
-			}
-
-			if transition.Condition != "" {
-				if _, ok := conditionsMap[transition.Condition]; ok {
-					transitionToAdd.Condition = conditionsMap[transition.Condition]
-				} else {
-					return nil, fmt.Errorf("failed to find condition '%s', for transition '%s' in state '%s'", transition.Condition, transition.Name, state.Name)
-				}
-			}
-
-			// Default to ingress queue if no queue is specified.
-			if transition.Queue == "" {
-				transitionToAdd.Queue = models.QueueTypeIngress
-			} else {
-				transitionToAdd.Queue = models.QueueType(transition.Queue)
-			}
-			nextState := statesMap[transition.Action.NextState]
-			transitionToAdd.Action.NextState = &nextState
-			transitionToAdd.Action.Queue = transition.Action.Queue
-			transitionToAdd.Name = transition.Name
-			transitionToAdd.Default = transition.Default
-			statesMap[state.Name].Transitions[i] = transitionToAdd
+	for _, intrfce := range interfacesMap {
+		if intrfce.Transition == nil {
+			continue
 		}
-		res.States = append(res.States, statesMap[state.Name])
+		nextInterface := interfacesMap[intrfce.Transition.Action.NextInterface.Name]
+		intrfce.Transition.Action.NextInterface = nextInterface
+		res.Interfaces = append(res.Interfaces, intrfce)
 	}
 	return res, nil
 }

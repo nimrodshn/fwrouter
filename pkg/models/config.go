@@ -7,9 +7,7 @@ package models
 // Config represents the internal transition table configuration, including the different
 // states in the states machine and marks and conditions used to describe transitions from state to state.
 type Config struct {
-	States     []State
-	Marks      []Mark
-	Conditions []Condition
+	Interfaces []Interface
 }
 
 // Condition represents a conditions which is used for a transition in the transitions table.
@@ -17,7 +15,7 @@ type Config struct {
 type Condition struct {
 	Name  string
 	Type  ConditionType
-	Value interface{}
+	Match interface{}
 }
 
 // A ConditionType is an enum for the different condition types used by transitions.
@@ -26,6 +24,7 @@ type ConditionType string
 var (
 	HTTPSTrafficCondition ConditionType = "https-traffic"
 	MarkCondition         ConditionType = "mark"
+	DefaultCondition      ConditionType = "default"
 )
 
 // A QueueType is an enum for the different queue types used by transitions.
@@ -45,25 +44,22 @@ type Mark struct {
 	Value uint32
 }
 
-// A State represents an interface in the host machine, conversly, a state in the transition table.
-type State struct {
-	Name          string
-	InterfaceName string
-	InterfaceIdx  int
-	Transitions   []Transition
+// Represents a physical or virtual interface in the host machine.
+type Interface struct {
+	Name         string
+	InterfaceIdx int
+	Transition   *Transition
 }
 
 // A Transition represents a transition of packets from one State (interface) to another.
 type Transition struct {
 	Name      string
 	Queue     QueueType
-	Condition Condition
+	Condition *Condition
 	Action    Action
-	Default   bool
 }
 
 type Action struct {
-	Queue     string
-	NextState *State
-	Mark      Mark
+	Queue         string
+	NextInterface Interface
 }

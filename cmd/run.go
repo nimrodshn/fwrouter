@@ -48,20 +48,18 @@ func runRouter(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to map config file: '%s': %v", configFile, err)
 	}
 
-	// Load pre-compiled programs and populate maps.
-	for _, state := range cfg.States {
-		if state.Transitions == nil || len(state.Transitions) == 0 {
-			continue
-		}
+	log.Println("Config: ", cfg)
 
-		log.Printf("Loading eBPF objects for interface: %s", state.InterfaceName)
-		objsManager, err := ebpf.LoadObjects(state.InterfaceName)
+	// Load pre-compiled programs and populate maps.
+	for _, iface := range cfg.Interfaces {
+		log.Printf("Loading eBPF objects for interface: %s", iface.Name)
+		objsManager, err := ebpf.LoadObjects(iface.Name)
 		if err != nil {
 			log.Fatalf("Failed to load eBPF objects to kernel: %v", err)
 		}
 		defer objsManager.Detach()
 
-		err = populateTransitionsMapping(state, objsManager)
+		err = populateTransitionMapping(iface, objsManager)
 		if err != nil {
 			log.Fatalf("Failed to populate transitions mapping: %v", err)
 		}
@@ -72,59 +70,23 @@ func runRouter(cmd *cobra.Command, args []string) {
 	log.Println("Exiting...")
 }
 
-func populateTransitionsMapping(state models.State, objsManager ebpf.ObjectsManager) error {
-	var err error
-	var ingressCount uint32
-	var egressCount uint32
-	for _, transition := range state.Transitions {
-		log.Printf("Populating transition for state '%s': %+v", state.Name, transition)
-		switch transition.Queue {
-		case models.QueueTypeIngress:
-			if ingressCount, err = UpdateIngressTransition(transition, objsManager, ingressCount); err != nil {
-				return err
-			}
-			err = objsManager.UpdateIngressTransitionsLengthMap(0, ingressCount)
-			if err != nil {
-				return err
-			}
-		case models.QueueTypeEgress:
-			if egressCount, err = UpdateEgressTransition(transition, objsManager, egressCount); err != nil {
-				return err
-			}
-			err = objsManager.UpdateEgressTransitionsLengthMap(0, egressCount)
-			if err != nil {
-				return err
-			}
+func populateTransitionMapping(iface models.Interface, objsManager ebpf.ObjectsManager) error {
+	if iface.Transition == nil {
+		return nil
+	}
+
+	switch iface.Transition.Queue {
+	case models.QueueTypeIngress:
+		if err := objsManager.UpdateIngressTransitionsMap(defaultKey, ebpf.SerializeTransition(*iface.Transition)); err != nil {
+			return err
+		}
+	case models.QueueTypeEgress:
+		if err := objsManager.UpdateEgressTransitionsMap(defaultKey, ebpf.SerializeTransition(*iface.Transition)); err != nil {
+			return err
 		}
 	}
 
 	return nil
-}
-
-func UpdateEgressTransition(transition models.Transition, objsManager ebpf.ObjectsManager, transitionIdx uint32) (uint32, error) {
-	if transition.Default {
-		var defaultKey uint32 = 0
-		return transitionIdx, objsManager.UpdateEgressDefaultTransitionMap(defaultKey, ebpf.SerializeTransition(transition))
-	}
-
-	err := objsManager.UpdateEgressTransitionsMap(transitionIdx, ebpf.SerializeTransition(transition))
-	if err != nil {
-		return transitionIdx + 1, nil
-	}
-	return transitionIdx, nil
-}
-
-func UpdateIngressTransition(transition models.Transition, objsManager ebpf.ObjectsManager, transitionIdx uint32) (uint32, error) {
-	if transition.Default {
-		var defaultKey uint32 = 0
-		return transitionIdx, objsManager.UpdateIngressDefaultTransitionMap(defaultKey, ebpf.SerializeTransition(transition))
-	}
-
-	err := objsManager.UpdateIngressTransitionsMap(transitionIdx, ebpf.SerializeTransition(transition))
-	if err != nil {
-		return transitionIdx + 1, nil
-	}
-	return transitionIdx, nil
 }
 
 func setupSignalChannel() <-chan os.Signal {

@@ -17,10 +17,6 @@ type ObjectsManager interface {
 	Detach() error
 	UpdateIngressTransitionsMap(key uint32, transition Transition) error
 	UpdateEgressTransitionsMap(key uint32, transition Transition) error
-	UpdateIngressDefaultTransitionMap(key uint32, transition Transition) error
-	UpdateEgressDefaultTransitionMap(key uint32, transition Transition) error
-	UpdateIngressTransitionsLengthMap(key uint32, len uint32) error
-	UpdateEgressTransitionsLengthMap(key uint32, len uint32) error
 }
 
 type DefaultObjectsManager struct {
@@ -138,25 +134,7 @@ func (o *DefaultObjectsManager) UpdateIngressTransitionsMap(key uint32, transiti
 	return o.objects.IngressTransitions.Put(key, transition)
 }
 
-func (o *DefaultObjectsManager) UpdateIngressDefaultTransitionMap(key uint32, transition Transition) error {
-	log.Printf("Updating ingress default transition map with key '%d': %+v", key, transition)
-	return o.objects.DefaultIngressTransition.Put(key, transition)
-}
-
-func (o *DefaultObjectsManager) UpdateIngressTransitionsLengthMap(key uint32, len uint32) error {
-	return o.objects.IngressTransitionsLen.Put(key, len)
-}
-
 func (o *DefaultObjectsManager) UpdateEgressTransitionsMap(key uint32, transition Transition) error {
 	log.Printf("Updating egress transition map with key '%d': %+v", key, transition)
 	return o.objects.EgressTransitions.Put(key, transition)
-}
-
-func (o *DefaultObjectsManager) UpdateEgressDefaultTransitionMap(key uint32, transition Transition) error {
-	log.Printf("Updating egress default transition map with key '%d': %+v", key, transition)
-	return o.objects.DefaultEgressTransition.Put(key, transition)
-}
-
-func (o *DefaultObjectsManager) UpdateEgressTransitionsLengthMap(key uint32, len uint32) error {
-	return o.objects.EgressTransitionsLen.Put(key, len)
 }

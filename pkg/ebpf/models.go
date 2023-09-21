@@ -2,7 +2,9 @@
 package ebpf
 
 import (
+	"encoding/binary"
 	"fwrouter/pkg/models"
+	"log"
 )
 
 type ConditionType uint32
@@ -28,10 +30,24 @@ type Condition struct {
 
 // Represents a transition for the bpf program to oversee.
 type Transition struct {
-	Cond    Condition
+	Cond    *Condition
 	Queue   QueueType
-	Mark    uint32
-	NextHop uint32
+	NextHop int32
+}
+
+func (t Transition) MarshalBinary() (data []byte, err error) {
+	size := UINT_SIZE + UINT_SIZE + UINT_SIZE + UINT_SIZE
+	res := make([]byte, size)
+
+	if t.Cond != nil {
+		binary.LittleEndian.PutUint32(res, uint32(t.Cond.Type))
+		binary.LittleEndian.PutUint32(res[UINT_SIZE:], t.Cond.Value)
+	}
+
+	binary.LittleEndian.PutUint32(res[2*UINT_SIZE:], uint32(t.Queue))
+	binary.LittleEndian.PutUint32(res[3*UINT_SIZE:], uint32(t.NextHop))
+	log.Println(res)
+	return res, nil
 }
 
 const UINT_SIZE = 4
@@ -41,19 +57,22 @@ func SerializeTransition(transition models.Transition) Transition {
 	return Transition{
 		Cond:    SerializeCondition(transition.Condition),
 		Queue:   SerializeQueue(transition.Queue),
-		Mark:    transition.Action.Mark.Value,
-		NextHop: uint32(transition.Action.NextState.InterfaceIdx),
+		NextHop: int32(transition.Action.NextInterface.InterfaceIdx),
 	}
 }
 
-func SerializeCondition(condition models.Condition) Condition {
-	var res Condition
+func SerializeCondition(condition *models.Condition) *Condition {
+	if condition == nil {
+		return nil
+	}
+
+	res := &Condition{}
 	var conditionType ConditionType
-	var value uint32
+	var value int
 	switch condition.Type {
 	case models.MarkCondition:
 		conditionType = MARK
-		value = condition.Value.(uint32)
+		value = condition.Match.(int)
 	case models.HTTPSTrafficCondition:
 		conditionType = L7_PROTOCOL_HTTPS
 	default:
