@@ -40,30 +40,28 @@ Run the following command: `sudo cat /sys/kernel/debug/tracing/trace_pipe`
 Compile the program using `make`, followed by: `sudo ./fwrouter run --config-file=./examples/idps.yaml`
 
 ## How to define a state machine for packet flow?
-The following is an example of how to define a [state-transition table](https://en.wikipedia.org/wiki/State-transition_table) for packet flow in the firewall. States in the following transition table are represented as physical / virtual interfaces and thus, 
-share properties with network interfaces.
+The following is an example of how to define a [state-transition table](https://en.wikipedia.org/wiki/State-transition_table) for packet flow in the firewall. interfaces in the following transition table are represented as physical / virtual interfaces and thus, 
+share properties with network interfaces. Each interface only supports a *single* transition.
 ```
 ---
-states:
+interfaces:
   - name: "eth0"
-    interface: "eth0"
-    transitions:
-      - name: "default-traffic-to-idps"
-        action:
-          next-state: "veth0"
-          queue: "ingress"
-        default: true
+    transition:
+      name: "egress-with-envoy-mark-to-idps"
+      queue: "egress"
+      condition:
+        type: "mark"
+        match: 0x11
+      action:
+        next-interface: "dummy0"
         queue: "ingress"
-  - name: "veth0"
-    interface: "veth0"
-  - name: "veth1"
-    interface: "veth1"
-    transitions:
-      - name: "default-traffic-to-eth0"
-        action:
-          next-state: "eth0"
-          queue: "egress"
-        default: true
+  - name: "dummy0"
+  - name: "dummy1"
+    transition:
+      name: "default-traffic-to-eth0"
+      queue: "egress"
+      action:
+        next-state: "eth0"
         queue: "egress"
 ```
 
