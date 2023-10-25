@@ -4,128 +4,86 @@
 #include <linux/ip.h>
 #include <stdio.h>
 #include <string.h>
-#include "bpf_helpers.h"
+#include <linux/in.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
+#include <bpf/bpf_helpers.h>
 
-#define MAX_NODES 256
-#define MAX_TRANSITIONS 10
+#define MAX_ENTRIES 256
 
-enum condition_type {
-    L7_PROTOCOL_HTTPS,
-    MARK,
-    DEFAULT
+// Stores the mapping from a port range to the next assigned socket.
+struct __mapping {
+    __u32 low_port;
+    __u32 high_port;
 };
 
-enum __queue {
-    INGRESS,
-    EGRESS
-};
-
-struct __condition {
-    enum condition_type type;
-    __u32 value;
-};
-
-// Represents the information required to compute the next transition.
-struct __transition {
-    struct __condition cond;
-    enum __queue queue;
-    __u32 next_iface_idx;
-};
-
-struct bpf_map_def SEC("maps") ingress_transitions = {
+struct bpf_map_def SEC("maps") port_mappings = {
     .type = BPF_MAP_TYPE_ARRAY,
     .key_size = sizeof(__u32),
-    .value_size = sizeof(struct __transition),
-    .max_entries = MAX_NODES,
+    .value_size = sizeof(struct __mapping),
+    .max_entries = MAX_ENTRIES,
 };
 
-struct bpf_map_def SEC("maps") egress_transitions = {
-    .type = BPF_MAP_TYPE_ARRAY,
+struct bpf_map_def SEC("maps") default_socket = {
+    .type = BPF_MAP_TYPE_SOCKMAP,
     .key_size = sizeof(__u32),
-    .value_size = sizeof(struct __transition),
-    .max_entries = MAX_NODES,
+    .value_size = sizeof(__u32),
+    .max_entries = 1,
 };
 
 SEC("tc")
-int tc_ingress(struct __sk_buff *skb)
+int redir_lookup(struct __sk_buff *skb)
 {
+    __u32 dest_port = 0;
     __u32 default_key = 0;
-    void *data_end = (void *)(unsigned long long)skb->data_end;
-	void *data = (void *)(unsigned long long)skb->data;
-	struct ethhdr *eth = data;
 
-	if (data + sizeof(struct ethhdr) > data_end)
-		return TC_ACT_SHOT;
-    
-    struct __transition *destination = bpf_map_lookup_elem(&ingress_transitions, &default_key);
-    if ( destination != NULL ) {
-        bpf_printk("Got hereeee %d %d %d\n", destination->cond.type, destination->cond.value, destination->next_iface_idx);
-        switch (destination->cond.type) {
-            case MARK:
-                bpf_printk("MARK condition: %d\n", destination->cond.value);
-                bpf_printk("MARK skb->mark: %d\n", skb->mark);
-                if (skb->mark == destination->cond.value) {
-                    bpf_printk("MARK MATCHED!!!!!!!!!!\n");
-                    switch (destination->queue) {
-                        case INGRESS:
-                            return bpf_clone_redirect(skb, destination->next_iface_idx, BPF_F_INGRESS);
-                        case EGRESS:
-                            // zero flag means that the socket buffer is
-                            // redirected to the iface egress path
-                            return bpf_clone_redirect(skb, destination->next_iface_idx, 0);
-                        }
-                }
-                break;
-            case L7_PROTOCOL_HTTPS:
-                break;
-            case DEFAULT:
-                break;
-        }
+    struct __mapping *mapping = bpf_map_lookup_elem(&port_mappings, &default_key);
+    if ( mapping == NULL ) {
+        return TC_ACT_OK;;
     }
 
-    return TC_ACT_OK;
-}
-
-SEC("tc")
-int tc_egress(struct __sk_buff *skb)
-{
-    __u32 default_key = 0;
-    void *data_end = (void *)(unsigned long long)skb->data_end;
-	void *data = (void *)(unsigned long long)skb->data;
-	struct ethhdr *eth = data;
-
-	if (data + sizeof(struct ethhdr) > data_end)
-		return TC_ACT_SHOT;
-
-    struct iphdr *ip = data + sizeof(*eth);
-    if (data + sizeof(struct iphdr) > data_end)
-        return TC_ACT_SHOT;
-    
-    struct __transition *destination = bpf_map_lookup_elem(&egress_transitions, &default_key);
-    if ( destination != NULL ) {
-        bpf_printk("Got hereeee %d %d %d\n", destination->cond.type, destination->cond.value, destination->next_iface_idx);
-        switch (destination->cond.type) {
-            case MARK:
-                bpf_printk("MARK condition: %d\n", destination->cond.value);
-                bpf_printk("MARK skb->mark: %d\n", skb->mark);
-                if (skb->mark == destination->cond.value) {
-                    bpf_printk("MARK MATCHED!!!!!!!!!!\n");
-                    switch (destination->queue) {
-                        case INGRESS:
-                            return bpf_clone_redirect(skb, destination->next_iface_idx, BPF_F_INGRESS);
-                        case EGRESS:
-                            // zero flag means that the socket buffer is
-                            // redirected to the iface egress path
-                            return bpf_clone_redirect(skb, destination->next_iface_idx, 0);
-                        }
-                }
-                break;
-            case L7_PROTOCOL_HTTPS:
-                break;
-            case DEFAULT:
-                break;
-        }
+    void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
+    // Necessary validation: if L3 layer does not exist, ignore and continue.
+    if (data + sizeof(struct ethhdr) > data_end) {
+        return TC_ACT_OK;
     }
+
+    struct ethhdr *eth = data;
+    struct iphdr *ip_header = data + sizeof(struct ethhdr);
+    if ((void*) ip_header + sizeof(struct iphdr) > data_end) {
+        return TC_ACT_OK;
+    }
+
+    __u8 proto = ip_header->protocol;
+    if (proto == IPPROTO_UDP) {
+        struct udphdr *udp_header = (void*)ip_header + sizeof(struct iphdr);
+        if ((void*) udp_header + sizeof(struct udphdr) > data_end) {
+            return TC_ACT_OK;
+        }
+        
+        dest_port = udp_header->dest;
+    }
+
+    if (proto == IPPROTO_TCP) {
+        struct tcphdr *tcp_header = (void*)ip_header + sizeof(struct iphdr);
+        if ((void*) tcp_header + sizeof(struct tcphdr) > data_end) {
+            return TC_ACT_OK;
+        }
+    
+        dest_port = tcp_header->dest;
+    }
+
+    if (dest_port >= mapping->low_port && dest_port <= mapping->high_port) {
+        struct bpf_sock *sk = bpf_map_lookup_elem(&default_socket, &default_key);
+        if (!sk)
+            return TC_ACT_OK;
+
+        int err = bpf_sk_assign(skb, sk, 0);
+        bpf_sk_release(sk);
+        return err ? TC_ACT_SHOT : TC_ACT_OK;
+    }
+
     return TC_ACT_OK;
 }
 

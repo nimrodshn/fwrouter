@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"unsafe"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
@@ -15,14 +16,13 @@ import (
 // A manager exposing API for handling our eBPF loaded maps and programs.
 type ObjectsManager interface {
 	Detach() error
-	UpdateIngressTransitionsMap(key uint32, transition Transition) error
-	UpdateEgressTransitionsMap(key uint32, transition Transition) error
+	UpdatePortMappingsMap(key uint32, mapping PortMapping) error
+	UpdateDefaultSocketMap(key uint32, socket Socket) error
 }
 
 type DefaultObjectsManager struct {
 	objects       ebpfObjects
 	ingressFilter netlink.Filter
-	egressFilter  netlink.Filter
 	qdisc         netlink.Qdisc
 }
 
@@ -73,18 +73,10 @@ func LoadObjects(ifac string) (ObjectsManager, error) {
 		Priority:  1,
 	}
 
-	filterEgressAttrs := netlink.FilterAttrs{
-		LinkIndex: nl.Attrs().Index,
-		Parent:    netlink.HANDLE_MIN_EGRESS,
-		Handle:    netlink.MakeHandle(0, 1),
-		Protocol:  unix.ETH_P_ALL,
-		Priority:  1,
-	}
-
 	filterIngress := &netlink.BpfFilter{
 		FilterAttrs:  filterIngressAttrs,
-		Fd:           objs.TcIngress.FD(),
-		Name:         "tc_ingress",
+		Fd:           objs.RedirLookup.FD(),
+		Name:         "redir_lookup",
 		DirectAction: true,
 	}
 
@@ -93,22 +85,9 @@ func LoadObjects(ifac string) (ObjectsManager, error) {
 		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
 	}
 
-	filterEgress := &netlink.BpfFilter{
-		FilterAttrs:  filterEgressAttrs,
-		Fd:           objs.TcEgress.FD(),
-		Name:         "tc_egress",
-		DirectAction: true,
-	}
-
-	err = netlink.FilterAdd(filterEgress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
-	}
-
 	return &DefaultObjectsManager{
 		objects:       objs,
 		ingressFilter: filterIngress,
-		egressFilter:  filterEgress,
 		qdisc:         qdisc,
 	}, nil
 }
@@ -120,21 +99,18 @@ func (o *DefaultObjectsManager) Detach() error {
 	if err := netlink.FilterDel(o.ingressFilter); err != nil {
 		return fmt.Errorf("failed to delete filter %v: ", err)
 	}
-	if err := netlink.FilterDel(o.egressFilter); err != nil {
-		return fmt.Errorf("failed to delete filter %v: ", err)
-	}
 	if err := netlink.QdiscDel(o.qdisc); err != nil {
 		return fmt.Errorf("failed to delete qdisc: %v", err)
 	}
 	return nil
 }
 
-func (o *DefaultObjectsManager) UpdateIngressTransitionsMap(key uint32, transition Transition) error {
-	log.Printf("Updating ingress transition map with key '%d': %+v", key, transition)
-	return o.objects.IngressTransitions.Put(key, transition)
+func (o *DefaultObjectsManager) UpdatePortMappingsMap(key uint32, mapping PortMapping) error {
+	log.Printf("Updating port mappings map with key '%d': %+v", key, mapping)
+	return o.objects.PortMappings.Put(key, mapping)
 }
 
-func (o *DefaultObjectsManager) UpdateEgressTransitionsMap(key uint32, transition Transition) error {
-	log.Printf("Updating egress transition map with key '%d': %+v", key, transition)
-	return o.objects.EgressTransitions.Put(key, transition)
+func (o *DefaultObjectsManager) UpdateDefaultSocketMap(key uint32, socket Socket) error {
+	log.Printf("Updating default socket map  map with key '%d': %+v", key, socket)
+	return o.objects.DefaultSocket.Put(unsafe.Pointer(&key), unsafe.Pointer(&socket.FileDescriptor))
 }

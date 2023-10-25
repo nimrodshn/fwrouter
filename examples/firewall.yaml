@@ -1,37 +1,5 @@
 ---
-states:
-  - name: "eth0"
-    interface: "eth0"
-    transitions:
-      - name: "default-traffic"
-        action:
-          next-state: "envoy"
-          mark: "envoy"
-  - name: "haproxy"
-    interface: "haproxy0"
-    transitions:
-      - name: "default-traffic"
-        action:
-          next-state: "idps"
-  - name: "idps"
-    interface: "idps0"
-    transitions:
-      - name: "past-envoy-traffic"
-        condition: "envoy"
-        action:
-          next-state: "eth0"
-          queue: "tx"
-      - name: "default-traffic"
-        action:  
-          next-state: "eth0"
-          queue: "rx"
-          mark: "envoy"
-marks:
-  - name: "envoy"
-    value: 100
-conditions:
-  - name: "envoy-traffic"
-    type: "mark"
-    value: "envoy"
-  - name: "https-traffic"
-    type: "https-traffic"
+socket_mappings:
+  - name: "default"
+    low_port: 5000
+    high_port: 8000
