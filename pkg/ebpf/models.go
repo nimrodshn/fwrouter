@@ -8,14 +8,15 @@ type PortMapping struct {
 	HighPort uint32
 }
 
-func SerializeMapping(mapping api.SocketMapping) PortMapping {
+func SerializeMapping(mapping api.InterfaceMapping) PortMapping {
 	return PortMapping{
 		LowPort:  mapping.LowPort,
 		HighPort: mapping.HighPort,
 	}
 }
 
-// Represents a socket for the bpf program to oversee.
-type Socket struct {
-	FileDescriptor uintptr
+// Represents an interface for the bpf program to redirect.
+type Destination struct {
+	DefaultIfaceIdx     uint32
+	IngressIdpsIfaceIdx uint32
 }

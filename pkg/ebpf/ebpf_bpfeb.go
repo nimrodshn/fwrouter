@@ -54,15 +54,16 @@ type ebpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfProgramSpecs struct {
-	RedirLookup *ebpf.ProgramSpec `ebpf:"redir_lookup"`
+	RedirectMarkedTraffic *ebpf.ProgramSpec `ebpf:"redirect_marked_traffic"`
+	RedirectToIdps        *ebpf.ProgramSpec `ebpf:"redirect_to_idps"`
 }
 
 // ebpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
-	DefaultSocket *ebpf.MapSpec `ebpf:"default_socket"`
-	PortMappings  *ebpf.MapSpec `ebpf:"port_mappings"`
+	DefaultDestination *ebpf.MapSpec `ebpf:"default_destination"`
+	PortMappings       *ebpf.MapSpec `ebpf:"port_mappings"`
 }
 
 // ebpfObjects contains all objects after they have been loaded into the kernel.
@@ -84,13 +85,13 @@ func (o *ebpfObjects) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
-	DefaultSocket *ebpf.Map `ebpf:"default_socket"`
-	PortMappings  *ebpf.Map `ebpf:"port_mappings"`
+	DefaultDestination *ebpf.Map `ebpf:"default_destination"`
+	PortMappings       *ebpf.Map `ebpf:"port_mappings"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
-		m.DefaultSocket,
+		m.DefaultDestination,
 		m.PortMappings,
 	)
 }
@@ -99,12 +100,14 @@ func (m *ebpfMaps) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfPrograms struct {
-	RedirLookup *ebpf.Program `ebpf:"redir_lookup"`
+	RedirectMarkedTraffic *ebpf.Program `ebpf:"redirect_marked_traffic"`
+	RedirectToIdps        *ebpf.Program `ebpf:"redirect_to_idps"`
 }
 
 func (p *ebpfPrograms) Close() error {
 	return _EbpfClose(
-		p.RedirLookup,
+		p.RedirectMarkedTraffic,
+		p.RedirectToIdps,
 	)
 }
 

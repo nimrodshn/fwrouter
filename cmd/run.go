@@ -1,24 +1,20 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"fwrouter/pkg/ebpf"
+	"fwrouter/pkg/iface"
 	"fwrouter/pkg/yaml"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/spf13/cobra"
 )
 
-const connHost = "localhost"
-const connType = "tcp"
 const defaultIface = "eth0"
-const defaultPort = 3000
 
 var defaultKey uint32 = 0
 
@@ -29,9 +25,13 @@ var runCmd = cobra.Command{
 }
 
 var configFile string
+var ingressIdpsIface string
+var egressIdpsIface string
 
 func init() {
 	runCmd.Flags().StringVar(&configFile, "config-file", "", "A config file containing the nodes for the route.")
+	runCmd.Flags().StringVar(&ingressIdpsIface, "ingress-idps-iface", "idps0", "The ingress interface used by the IDPS system.")
+	runCmd.Flags().StringVar(&egressIdpsIface, "egress-idps-iface", "idps1", "The egress interface used by the IDPS system.")
 }
 
 func runRouter(cmd *cobra.Command, args []string) {
@@ -46,14 +46,41 @@ func runRouter(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to parse config file: '%s': %v", configFile, err)
 	}
 
-	objsManager, err := ebpf.LoadObjects(defaultIface)
+	defaultIface, err := iface.VerifyExists(defaultIface)
+	if err != nil {
+		log.Fatalf("Failed to verify egress interface '%s': %v", defaultIface, err)
+	}
+	defer iface.DetachIface(defaultIface)
 
-	go buildDefaultServer(defaultPort, objsManager)
+	ingerssIdpsIface, err := iface.VerifyExists(ingressIdpsIface)
+	if err != nil {
+		log.Fatalf("Failed to verify egress interface '%s': %v", ingerssIdpsIface, err)
+	}
+	defer iface.DetachIface(ingerssIdpsIface)
 
-	// Load pre-compiled programs and populate maps.
-	for _, mapping := range cfg.SocketMappings {
+	egressIdpsIface, err := iface.VerifyExists(ingressIdpsIface)
+	if err != nil {
+		log.Fatalf("Failed to verify egress interface '%s': %v", ingerssIdpsIface, err)
+	}
+	defer iface.DetachIface(ingerssIdpsIface)
+
+	objsManager, err := ebpf.LoadObjects(defaultIface, egressIdpsIface)
+	if err != nil {
+		log.Fatalf("Failed to load eBPF program to kernel: %v", err)
+	}
+
+	err = objsManager.UpdateDefaultDestinationMap(defaultKey, ebpf.Destination{
+
+		IngressIdpsIfaceIdx: uint32(ingerssIdpsIface.Attrs().Index),
+	})
+	if err != nil {
+		log.Fatalf("failed to update destinations map: %v", err)
+	}
+
+	// Populate splicing map.
+	for _, mapping := range cfg.InterfaceMappings {
 		if err != nil {
-			log.Fatalf("Failed to load eBPF objects to kernel: %v", err)
+			log.Fatalf("Failed to load socket mapping objects to kernel: %v", err)
 		}
 		defer objsManager.Detach()
 
@@ -72,42 +99,4 @@ func setupSignalChannel() <-chan os.Signal {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	return sigs
-}
-
-func buildDefaultServer(port int, objsManager ebpf.ObjectsManager) {
-	listenAddress := fmt.Sprintf("%s:%d", connHost, defaultPort)
-	l, err := net.Listen(connType, listenAddress)
-	if err != nil {
-		log.Fatalf("failed to listen on port %d: %s", port, err)
-	}
-
-	defer func() {
-		err := l.Close()
-		if err != nil {
-			log.Fatalf("failed to close socket: %s", err)
-		}
-	}()
-	log.Printf("listening on address: %s", listenAddress)
-
-	for {
-		// accept
-		conn, err := l.Accept()
-		if err != nil {
-			log.Fatalf("error accepting: %s", err)
-		}
-
-		// retrieve copy of connection file descriptor
-		tcpConn, ok := conn.(*net.TCPConn)
-		if !ok {
-			log.Fatalf("failed to cast connection to TCP connection")
-		}
-
-		f, err := tcpConn.File()
-		if err != nil {
-			log.Fatalf("failed to retrieve copy of the underlying TCP connection file")
-		}
-		d := f.Fd()
-
-		objsManager.UpdateDefaultSocketMap(defaultKey, ebpf.Socket{FileDescriptor: d})
-	}
 }

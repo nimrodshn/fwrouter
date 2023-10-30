@@ -1,5 +1,5 @@
 ---
-socket_mappings:
+interface_mappings:
   - name: "default"
     low_port: 5000
     high_port: 8000
