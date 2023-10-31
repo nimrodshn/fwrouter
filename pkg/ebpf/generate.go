@@ -8,6 +8,7 @@ import (
 	"log"
 	"unsafe"
 
+	"github.com/cilium/ebpf/perf"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -15,8 +16,8 @@ import (
 // A manager exposing API for handling our eBPF loaded maps and programs.
 type ObjectsManager interface {
 	Detach() error
-	UpdatePortMappingsMap(key uint32, mapping PortMapping) error
 	UpdateDefaultDestinationMap(key uint32, destination Destination) error
+	ReadIncomingPackets() (*perf.Reader, error)
 }
 
 type DefaultObjectsManager struct {
@@ -163,12 +164,11 @@ func createQdiscForRedirectToIdps(objs ebpfObjects, defaultIface netlink.Link) (
 	return filter, qdisc, nil
 }
 
-func (o *DefaultObjectsManager) UpdatePortMappingsMap(key uint32, mapping PortMapping) error {
-	log.Printf("Updating port mappings map with key '%d': %+v", key, mapping)
-	return o.objects.PortMappings.Put(key, mapping)
-}
-
 func (o *DefaultObjectsManager) UpdateDefaultDestinationMap(key uint32, destination Destination) error {
 	log.Printf("Updating default socket map  map with key '%d': %+v", key, destination)
 	return o.objects.DefaultDestination.Put(unsafe.Pointer(&key), destination)
+}
+
+func (o *DefaultObjectsManager) ReadIncomingPackets() (*perf.Reader, error) {
+	return perf.NewReader(o.objects.IncomingPacketsPerfBuffer, 4096)
 }
