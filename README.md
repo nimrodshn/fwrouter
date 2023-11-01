@@ -30,8 +30,11 @@ To download run: `sudo apt install linux-tools-common`.
 Run the following command: `sudo cat /sys/kernel/debug/tracing/trace_pipe`
 
 ## How to run `fwrouter`?
-Compile the program using `make`, followed by: `sudo ./fwrouter run --config-file=./examples/firewall.yaml`
+Compile the program using `make`, followed by: `sudo ./fwrouter run`
 
 ## How to verify the program is loaded properly?
 Use the following command: `ip link`, and find the added interfaces listed.
 To see the `bpf` filter added use the following: `sudo tc -s -d filter show dev eth0 ingress`.
+
+## How to remove the qdisc added by this program manually?
+Use the following command to remove the qdisc: `sudo tc qdisc del dev eth0 clsact`.

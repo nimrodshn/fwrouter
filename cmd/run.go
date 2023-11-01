@@ -87,7 +87,7 @@ func runRouter(cmd *cobra.Command, args []string) {
 		"Dest addr",
 		"Port",
 	)
-	go readePackets(reader)
+	go readPackets(reader)
 
 	<-setupSignalChannel()
 	log.Println("Exiting...")
@@ -99,7 +99,7 @@ func setupSignalChannel() <-chan os.Signal {
 	return sigs
 }
 
-func readePackets(reader *perf.Reader) {
+func readPackets(reader *perf.Reader) {
 	var packet ebpf.Packet
 	for {
 		record, err := reader.Read()
@@ -112,9 +112,9 @@ func readePackets(reader *perf.Reader) {
 			continue
 		}
 
-		// Parse the ringbuf event entry into a packet structure.
+		// Parse the perf buffer event into a packet structure.
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), binary.BigEndian, &packet); err != nil {
-			log.Printf("parsing ringbuf event: %s", err)
+			log.Printf("parsing perf buffer event: %s", err)
 			continue
 		}
 

@@ -1,4 +1,4 @@
-ARCH    ?= $(shell uname -m | sed -e 's/aarch64/arm64/' -e 's/x86_64/x86/')
+ARCH ?= $(shell uname -m | sed -e 's/aarch64/arm64/' -e 's/x86_64/x86/')
 
 bytecode.$(ARCH).o: bpf.c
 	clang \

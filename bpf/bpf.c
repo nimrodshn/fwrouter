@@ -59,7 +59,7 @@ int redirect_marked_traffic(struct __sk_buff *skb) {
     // zero flag means that the socket buffer is
     // redirected to the iface egress path.
     skb->mark = IDPS_MARK;
-    return bpf_redirect(dest->default_iface_idx, 0);
+    return bpf_redirect(dest->default_iface_idx, BPF_F_INGRESS);
 }
 
 SEC("tc")
@@ -101,26 +101,35 @@ int redirect_to_idps(struct __sk_buff *skb) {
     source_port = tcp_header->source;
 
     if (skb->mark != IDPS_MARK) {
-        // Log packet forwarded to idps for logging.
+        struct __network_layer_packet original_context_key = {};
         struct __network_layer_packet packet = {};
-        packet.daddr = ip_header->daddr;
+        
         packet.saddr = ip_header->saddr;
+        packet.daddr = ip_header->daddr;
         packet.sport = source_port;
         packet.dport = dest_port;
+        // Log packet forwarded to idps for logging.
         bpf_perf_event_output(skb, &incoming_packets_perf_buffer, BPF_F_CURRENT_CPU, &packet, sizeof(struct __network_layer_packet));
 
-        // Query if the original packet of a proxies packet exists in memory.
+        // Check if the packet a *response* of a proxied packet / request.
+        // That is why the source and destination are switched up.
+        original_context_key.saddr = packet.daddr;
+        original_context_key.daddr = packet.saddr;
+        original_context_key.sport = packet.dport;
+        original_context_key.dport = packet.sport;
+
+        // Query if the original packet exists in memory.
         struct __network_layer_packet *original_packet = bpf_map_lookup_elem(&original_network_packets, &packet);
         if (original_packet != NULL) {
-            ip_header->daddr = original_packet->daddr;
-            ip_header->saddr = original_packet->saddr;
-            tcp_header->source = original_packet->sport;
-            tcp_header->dest = original_packet->dport;
+            // We are looking at the *response* of the proxied packet / request.
+            // That is why the source and destination are switched up.
+            ip_header->daddr = original_packet->saddr;
+            ip_header->saddr = original_packet->daddr;
+            tcp_header->source = original_packet->dport;
+            tcp_header->dest = original_packet->sport;
         }
 
-        // zero flag means that the socket buffer is
-        // redirected to the iface egress path.
-        return bpf_clone_redirect(skb, dest->ingress_idps_idx, 0);
+        return bpf_clone_redirect(skb, dest->ingress_idps_idx, BPF_F_INGRESS);
     }
 
     return TC_ACT_OK;
