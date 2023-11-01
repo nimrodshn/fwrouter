@@ -66,7 +66,8 @@ func runRouter(cmd *cobra.Command, args []string) {
 	}
 	defer objsManager.Detach()
 
-	err = objsManager.UpdateDefaultDestinationMap(defaultKey, ebpf.Destination{
+	err = objsManager.UpdateRedirectInterfaceDestinationMap(defaultKey, ebpf.Destination{
+		DefaultIfaceIdx:     uint32(defaultIface.Attrs().Index),
 		IngressIdpsIfaceIdx: uint32(ingerssIdpsIface.Attrs().Index),
 	})
 	if err != nil {

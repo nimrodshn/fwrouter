@@ -62,8 +62,9 @@ type ebpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
-	DefaultDestination        *ebpf.MapSpec `ebpf:"default_destination"`
-	IncomingPacketsPerfBuffer *ebpf.MapSpec `ebpf:"incoming_packets_perf_buffer"`
+	IncomingPacketsPerfBuffer    *ebpf.MapSpec `ebpf:"incoming_packets_perf_buffer"`
+	OriginalNetworkPackets       *ebpf.MapSpec `ebpf:"original_network_packets"`
+	RedirectInterfaceDestination *ebpf.MapSpec `ebpf:"redirect_interface_destination"`
 }
 
 // ebpfObjects contains all objects after they have been loaded into the kernel.
@@ -85,14 +86,16 @@ func (o *ebpfObjects) Close() error {
 //
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
-	DefaultDestination        *ebpf.Map `ebpf:"default_destination"`
-	IncomingPacketsPerfBuffer *ebpf.Map `ebpf:"incoming_packets_perf_buffer"`
+	IncomingPacketsPerfBuffer    *ebpf.Map `ebpf:"incoming_packets_perf_buffer"`
+	OriginalNetworkPackets       *ebpf.Map `ebpf:"original_network_packets"`
+	RedirectInterfaceDestination *ebpf.Map `ebpf:"redirect_interface_destination"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
-		m.DefaultDestination,
 		m.IncomingPacketsPerfBuffer,
+		m.OriginalNetworkPackets,
+		m.RedirectInterfaceDestination,
 	)
 }
 

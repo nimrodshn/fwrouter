@@ -5,7 +5,6 @@ package ebpf
 
 import (
 	"fmt"
-	"log"
 	"unsafe"
 
 	"github.com/cilium/ebpf/perf"
@@ -16,7 +15,7 @@ import (
 // A manager exposing API for handling our eBPF loaded maps and programs.
 type ObjectsManager interface {
 	Detach() error
-	UpdateDefaultDestinationMap(key uint32, destination Destination) error
+	UpdateRedirectInterfaceDestinationMap(key uint32, destination Destination) error
 	ReadIncomingPackets() (*perf.Reader, error)
 }
 
@@ -164,9 +163,8 @@ func createQdiscForRedirectToIdps(objs ebpfObjects, defaultIface netlink.Link) (
 	return filter, qdisc, nil
 }
 
-func (o *DefaultObjectsManager) UpdateDefaultDestinationMap(key uint32, destination Destination) error {
-	log.Printf("Updating default socket map  map with key '%d': %+v", key, destination)
-	return o.objects.DefaultDestination.Put(unsafe.Pointer(&key), destination)
+func (o *DefaultObjectsManager) UpdateRedirectInterfaceDestinationMap(key uint32, destination Destination) error {
+	return o.objects.RedirectInterfaceDestination.Put(unsafe.Pointer(&key), destination)
 }
 
 func (o *DefaultObjectsManager) ReadIncomingPackets() (*perf.Reader, error) {
