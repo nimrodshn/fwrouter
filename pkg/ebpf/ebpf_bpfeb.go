@@ -63,7 +63,8 @@ type ebpfProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
 	IncomingPacketsPerfBuffer    *ebpf.MapSpec `ebpf:"incoming_packets_perf_buffer"`
-	OriginalNetworkPackets       *ebpf.MapSpec `ebpf:"original_network_packets"`
+	OriginalToProxyMap           *ebpf.MapSpec `ebpf:"original_to_proxy_map"`
+	ProxyToOriginalMap           *ebpf.MapSpec `ebpf:"proxy_to_original_map"`
 	RedirectInterfaceDestination *ebpf.MapSpec `ebpf:"redirect_interface_destination"`
 }
 
@@ -87,14 +88,16 @@ func (o *ebpfObjects) Close() error {
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
 	IncomingPacketsPerfBuffer    *ebpf.Map `ebpf:"incoming_packets_perf_buffer"`
-	OriginalNetworkPackets       *ebpf.Map `ebpf:"original_network_packets"`
+	OriginalToProxyMap           *ebpf.Map `ebpf:"original_to_proxy_map"`
+	ProxyToOriginalMap           *ebpf.Map `ebpf:"proxy_to_original_map"`
 	RedirectInterfaceDestination *ebpf.Map `ebpf:"redirect_interface_destination"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
 		m.IncomingPacketsPerfBuffer,
-		m.OriginalNetworkPackets,
+		m.OriginalToProxyMap,
+		m.ProxyToOriginalMap,
 		m.RedirectInterfaceDestination,
 	)
 }

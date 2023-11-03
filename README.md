@@ -30,17 +30,18 @@ sudo ln -s /usr/bin/llvm-strip-10 /usr/bin/llvm-strip
 sudo ln -s /usr/bin/clang-10 /usr/bin/clang
 ```
 
-# Installing lbbpf & bpftool
-Newer Ubuntu versions (versions >= 20.04) contain libbpf installed. However, as most of our work machines (and firewalls) are running Ubuntu 18.04,
-we need to manually install the tool from source.
-Clone the git repo of libbpf into you're work machine: `git clone https://github.com/libbpf/libbpf.git`
-Run the following commands:
+# Installing lbbpf
+Newer Ubuntu versions (versions >= 20.04) contain `libbpf` built-in. However, as most of our work machines (and firewalls) are running Ubuntu 18.04,
+we need to manually install the library from source in order to use its `bpf` helpers.
+
+1. Clone the git repo of libbpf into you're work machine: `git clone https://github.com/libbpf/libbpf.git`
+2. Run the following commands:
 ```
 cd /src
 sudo make install
 ```
 
-Once installed you can make sure that the required headers are in the file system under `/usr/include/bpf`
+Once installed you can make sure that the required headers are in the file system under `/usr/include/bpf`.
 
 ## Debugging maps, programs, etc.
 Use the `bpftool` to debug maps, programs, etc.
