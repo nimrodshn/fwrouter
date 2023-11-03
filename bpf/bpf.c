@@ -12,7 +12,6 @@
 #define MAX_ENTRIES 65535
 #define IDPS_MARK 0x123
 
-// Map containing original four-tuple of a proxied tcp packet.
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, MAX_ENTRIES);

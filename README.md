@@ -2,25 +2,45 @@
 eBPF routing to/from interface devices on a host machine.
 
 ## Dependencies
-- llvm >= 11
-- clang >= 11
-- Ubuntu >= 20.04 LTS
+- llvm >= 10
+- clang >= 10
+- libelf
+- Ubuntu >= 18.04 LTS
+- libbpf & bpftool
 ---
 
-1. Update packages: `sudo apt update`.
-2. Install the dependencies: 
+1. Add the appropriate repository:
 ```
-sudo apt-get install llvm-11     \
-                     lldb-11     \
-                     llvm-11-dev \
-                     libllvm11   \
-                     llvm-11-runtime \
-                     clang-11    \
+add-apt-repository 'deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10  main'
+```
+
+2. Update packages: `sudo apt update`.
+
+3. Install the dependencies:
+```
+sudo apt-get install llvm-10     \
+                     lldb-10     \
+                     llvm-10-dev \
+                     libllvm10   \
+                     llvm-10-runtime \
+                     clang-10    \
                      gcc-multilib
 
-sudo ln -s /usr/bin/llvm-strip-11 /usr/bin/llvm-strip
-sudo ln -s /usr/bin/clang-11 /usr/bin/clang
+sudo ln -s /usr/bin/llvm-strip-10 /usr/bin/llvm-strip
+sudo ln -s /usr/bin/clang-10 /usr/bin/clang
 ```
+
+# Installing lbbpf & bpftool
+Newer Ubuntu versions (versions >= 20.04) contain libbpf installed. However, as most of our work machines (and firewalls) are running Ubuntu 18.04,
+we need to manually install the tool from source.
+Clone the git repo of libbpf into you're work machine: `git clone https://github.com/libbpf/libbpf.git`
+Run the following commands:
+```
+cd /src
+sudo make install
+```
+
+Once installed you can make sure that the required headers are in the file system under `/usr/include/bpf`
 
 ## Debugging maps, programs, etc.
 Use the `bpftool` to debug maps, programs, etc.
