@@ -55,7 +55,8 @@ type ebpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfProgramSpecs struct {
 	RedirectMarkedTraffic *ebpf.ProgramSpec `ebpf:"redirect_marked_traffic"`
-	RedirectToIdps        *ebpf.ProgramSpec `ebpf:"redirect_to_idps"`
+	RedirectToIdpsEgress  *ebpf.ProgramSpec `ebpf:"redirect_to_idps_egress"`
+	RedirectToIdpsIngress *ebpf.ProgramSpec `ebpf:"redirect_to_idps_ingress"`
 }
 
 // ebpfMapSpecs contains maps before they are loaded into the kernel.
@@ -63,8 +64,10 @@ type ebpfProgramSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type ebpfMapSpecs struct {
 	IncomingPacketsPerfBuffer    *ebpf.MapSpec `ebpf:"incoming_packets_perf_buffer"`
-	OriginalToProxyMap           *ebpf.MapSpec `ebpf:"original_to_proxy_map"`
-	ProxyToOriginalMap           *ebpf.MapSpec `ebpf:"proxy_to_original_map"`
+	OrigToProxyInboundMap        *ebpf.MapSpec `ebpf:"orig_to_proxy_inbound_map"`
+	OrigToProxyOutboundMap       *ebpf.MapSpec `ebpf:"orig_to_proxy_outbound_map"`
+	ProxyToOrigInboundMap        *ebpf.MapSpec `ebpf:"proxy_to_orig_inbound_map"`
+	ProxyToOrigOutboundMap       *ebpf.MapSpec `ebpf:"proxy_to_orig_outbound_map"`
 	RedirectInterfaceDestination *ebpf.MapSpec `ebpf:"redirect_interface_destination"`
 }
 
@@ -88,16 +91,20 @@ func (o *ebpfObjects) Close() error {
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfMaps struct {
 	IncomingPacketsPerfBuffer    *ebpf.Map `ebpf:"incoming_packets_perf_buffer"`
-	OriginalToProxyMap           *ebpf.Map `ebpf:"original_to_proxy_map"`
-	ProxyToOriginalMap           *ebpf.Map `ebpf:"proxy_to_original_map"`
+	OrigToProxyInboundMap        *ebpf.Map `ebpf:"orig_to_proxy_inbound_map"`
+	OrigToProxyOutboundMap       *ebpf.Map `ebpf:"orig_to_proxy_outbound_map"`
+	ProxyToOrigInboundMap        *ebpf.Map `ebpf:"proxy_to_orig_inbound_map"`
+	ProxyToOrigOutboundMap       *ebpf.Map `ebpf:"proxy_to_orig_outbound_map"`
 	RedirectInterfaceDestination *ebpf.Map `ebpf:"redirect_interface_destination"`
 }
 
 func (m *ebpfMaps) Close() error {
 	return _EbpfClose(
 		m.IncomingPacketsPerfBuffer,
-		m.OriginalToProxyMap,
-		m.ProxyToOriginalMap,
+		m.OrigToProxyInboundMap,
+		m.OrigToProxyOutboundMap,
+		m.ProxyToOrigInboundMap,
+		m.ProxyToOrigOutboundMap,
 		m.RedirectInterfaceDestination,
 	)
 }
@@ -107,13 +114,15 @@ func (m *ebpfMaps) Close() error {
 // It can be passed to loadEbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ebpfPrograms struct {
 	RedirectMarkedTraffic *ebpf.Program `ebpf:"redirect_marked_traffic"`
-	RedirectToIdps        *ebpf.Program `ebpf:"redirect_to_idps"`
+	RedirectToIdpsEgress  *ebpf.Program `ebpf:"redirect_to_idps_egress"`
+	RedirectToIdpsIngress *ebpf.Program `ebpf:"redirect_to_idps_ingress"`
 }
 
 func (p *ebpfPrograms) Close() error {
 	return _EbpfClose(
 		p.RedirectMarkedTraffic,
-		p.RedirectToIdps,
+		p.RedirectToIdpsEgress,
+		p.RedirectToIdpsIngress,
 	)
 }
 

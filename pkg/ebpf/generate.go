@@ -21,10 +21,11 @@ type ObjectsManager interface {
 
 type DefaultObjectsManager struct {
 	objects                     ebpfObjects
-	redirectToIdpsFilter        netlink.Filter
 	redirectToIdpsQdisc         netlink.Qdisc
-	redirectMarkedTrafficFilter netlink.Filter
+	redirectToIdpsIngressFilter netlink.Filter
+	redirectToIdpsEgressFilter  netlink.Filter
 	redirectMarkedTrafficQdisc  netlink.Qdisc
+	redirectMarkedTrafficFilter netlink.Filter
 }
 
 // LoadObjects loads the eBPF program to kernel and attaches it to the newly created
@@ -35,12 +36,43 @@ func LoadObjects(defaultIface, idpsEgressIface netlink.Link) (ObjectsManager, er
 		return nil, err
 	}
 
-	redirectToIdpsFilter, redirectToIdpsQdisc, err := createQdiscForRedirectToIdps(objs, defaultIface)
+	// Create a 'clsact' qdisc and attach it to our
+	// source interface. This qdisc will than be used
+	// to attach our bpf program on its ingress hook.
+	// This qdisc is a dummy providing the necessary ingress/egress
+	// hook points for our bpf program.
+	// For more information see the following articles: https://docs.cilium.io/en/latest/bpf/progtypes/#tc-traffic-control
+	// as well as https://lwn.net/Articles/671458/
+	attrs := netlink.QdiscAttrs{
+		LinkIndex: defaultIface.Attrs().Index,
+		Handle:    netlink.MakeHandle(0xffff, 0),
+		Parent:    netlink.HANDLE_CLSACT,
+	}
+	redirectToIdpsQdisc := &netlink.GenericQdisc{
+		QdiscAttrs: attrs,
+		QdiscType:  "clsact",
+	}
+
+	if err := netlink.QdiscAdd(redirectToIdpsQdisc); err != nil {
+		return nil, fmt.Errorf("failed to add qdisc: %v", err.Error())
+	}
+
+	redirectToIdpsIngressFilter, err := createFilterForRedirectToIdpsIngress(objs, defaultIface)
 	if err != nil {
 		return nil, err
 	}
 
-	err = netlink.FilterAdd(redirectToIdpsFilter)
+	redirectToIdpsEgressFilter, err := createFilterForRedirectToIdpsEgress(objs, defaultIface)
+	if err != nil {
+		return nil, err
+	}
+
+	err = netlink.FilterAdd(redirectToIdpsIngressFilter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
+	}
+
+	err = netlink.FilterAdd(redirectToIdpsEgressFilter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add filter err: %v", err.Error())
 	}
@@ -57,10 +89,11 @@ func LoadObjects(defaultIface, idpsEgressIface netlink.Link) (ObjectsManager, er
 
 	return &DefaultObjectsManager{
 		objects:                     objs,
-		redirectToIdpsFilter:        redirectToIdpsFilter,
 		redirectToIdpsQdisc:         redirectToIdpsQdisc,
-		redirectMarkedTrafficFilter: redirectMarkedFilter,
+		redirectToIdpsIngressFilter: redirectToIdpsIngressFilter,
+		redirectToIdpsEgressFilter:  redirectToIdpsEgressFilter,
 		redirectMarkedTrafficQdisc:  redirectMarkedQdisc,
+		redirectMarkedTrafficFilter: redirectMarkedFilter,
 	}, nil
 }
 
@@ -68,17 +101,20 @@ func (o *DefaultObjectsManager) Detach() error {
 	if err := o.objects.Close(); err != nil {
 		return fmt.Errorf("failed to remove eBPF program: %v", err)
 	}
-	if err := netlink.FilterDel(o.redirectToIdpsFilter); err != nil {
+	if err := netlink.QdiscDel(o.redirectToIdpsQdisc); err != nil {
+		return fmt.Errorf("failed to delete qdisc: %v", err)
+	}
+	if err := netlink.FilterDel(o.redirectToIdpsIngressFilter); err != nil {
 		return fmt.Errorf("failed to delete filter %v: ", err)
 	}
-	if err := netlink.QdiscDel(o.redirectToIdpsQdisc); err != nil {
+	if err := netlink.FilterDel(o.redirectToIdpsEgressFilter); err != nil {
+		return fmt.Errorf("failed to delete filter %v: ", err)
+	}
+	if err := netlink.QdiscDel(o.redirectMarkedTrafficQdisc); err != nil {
 		return fmt.Errorf("failed to delete qdisc: %v", err)
 	}
 	if err := netlink.FilterDel(o.redirectMarkedTrafficFilter); err != nil {
 		return fmt.Errorf("failed to delete filter %v: ", err)
-	}
-	if err := netlink.QdiscDel(o.redirectToIdpsQdisc); err != nil {
-		return fmt.Errorf("failed to delete qdisc: %v", err)
 	}
 	return nil
 }
@@ -123,28 +159,7 @@ func createQdiscForRedirectMarkedTraffic(objs ebpfObjects, idpsEgressIface netli
 	return filter, qdisc, nil
 }
 
-func createQdiscForRedirectToIdps(objs ebpfObjects, defaultIface netlink.Link) (*netlink.BpfFilter, *netlink.GenericQdisc, error) {
-	// Create a 'clsact' qdisc and attach it to our
-	// source interface. This qdisc will than be used
-	// to attach our bpf program on its ingress hook.
-	// This qdisc is a dummy providing the necessary ingress/egress
-	// hook points for our bpf program.
-	// For more information see the following articles: https://docs.cilium.io/en/latest/bpf/progtypes/#tc-traffic-control
-	// as well as https://lwn.net/Articles/671458/
-	attrs := netlink.QdiscAttrs{
-		LinkIndex: defaultIface.Attrs().Index,
-		Handle:    netlink.MakeHandle(0xffff, 0),
-		Parent:    netlink.HANDLE_CLSACT,
-	}
-	qdisc := &netlink.GenericQdisc{
-		QdiscAttrs: attrs,
-		QdiscType:  "clsact",
-	}
-
-	if err := netlink.QdiscAdd(qdisc); err != nil {
-		return nil, nil, fmt.Errorf("failed to add qdisc: %v", err.Error())
-	}
-
+func createFilterForRedirectToIdpsIngress(objs ebpfObjects, defaultIface netlink.Link) (*netlink.BpfFilter, error) {
 	redirectToIdpsIngressAttrs := netlink.FilterAttrs{
 		LinkIndex: defaultIface.Attrs().Index,
 		Parent:    netlink.HANDLE_MIN_INGRESS,
@@ -155,12 +170,31 @@ func createQdiscForRedirectToIdps(objs ebpfObjects, defaultIface netlink.Link) (
 
 	filter := &netlink.BpfFilter{
 		FilterAttrs:  redirectToIdpsIngressAttrs,
-		Fd:           objs.RedirectToIdps.FD(),
-		Name:         "redirect_to_idps",
+		Fd:           objs.RedirectToIdpsIngress.FD(),
+		Name:         "redirect_to_idps_ingress",
 		DirectAction: true,
 	}
 
-	return filter, qdisc, nil
+	return filter, nil
+}
+
+func createFilterForRedirectToIdpsEgress(objs ebpfObjects, defaultIface netlink.Link) (*netlink.BpfFilter, error) {
+	redirectToIdpsEgressAttrs := netlink.FilterAttrs{
+		LinkIndex: defaultIface.Attrs().Index,
+		Parent:    netlink.HANDLE_MIN_EGRESS,
+		Handle:    netlink.MakeHandle(0, 1),
+		Protocol:  unix.ETH_P_ALL,
+		Priority:  1,
+	}
+
+	filter := &netlink.BpfFilter{
+		FilterAttrs:  redirectToIdpsEgressAttrs,
+		Fd:           objs.RedirectToIdpsEgress.FD(),
+		Name:         "redirect_to_idps_egress",
+		DirectAction: true,
+	}
+
+	return filter, nil
 }
 
 func (o *DefaultObjectsManager) UpdateRedirectInterfaceDestinationMap(key uint32, destination Destination) error {

@@ -30,9 +30,9 @@ sudo ln -s /usr/bin/llvm-strip-10 /usr/bin/llvm-strip
 sudo ln -s /usr/bin/clang-10 /usr/bin/clang
 ```
 
-# Installing lbbpf
-Newer Ubuntu versions (versions >= 20.04) contain `libbpf` built-in. However, as most of our work machines (and firewalls) are running Ubuntu 18.04,
-we need to manually install the library from source in order to use its `bpf` helpers.
+## Installing libbpf
+Ubuntu versions older than 20.04 dont come with `libbpf` built-in thus,
+we need to manually install the library from source in order to use its provided `bpf` helpers.
 
 1. Clone the git repo of libbpf into you're work machine: `git clone https://github.com/libbpf/libbpf.git`
 2. Run the following commands:
@@ -43,19 +43,21 @@ sudo make install
 
 Once installed you can make sure that the required headers are in the file system under `/usr/include/bpf`.
 
-## Debugging maps, programs, etc.
+## FAQ
+
+### debugging maps, programs, etc.
 Use the `bpftool` to debug maps, programs, etc.
 To download run: `sudo apt install linux-tools-common`.
 
-## Where are my 'bpf_printk' logs?
+### where are my 'bpf_printk' logs?
 Run the following command: `sudo cat /sys/kernel/debug/tracing/trace_pipe`
 
-## How to run `fwrouter`?
+### how to run `fwrouter`?
 Compile the program using `make`, followed by: `sudo ./fwrouter run`
 
-## How to verify the program is loaded properly?
+### how to verify the program is loaded properly?
 Use the following command: `ip link`, and find the added interfaces listed.
 To see the `bpf` filter added use the following: `sudo tc -s -d filter show dev eth0 ingress`.
 
-## How to remove the qdisc added by this program manually?
+### how to remove the qdisc added by this program manually?
 Use the following command to remove the qdisc: `sudo tc qdisc del dev eth0 clsact`.
